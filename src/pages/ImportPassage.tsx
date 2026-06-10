@@ -8,12 +8,7 @@ import {
   savePassageToDrive,
 } from '../lib/googleDrive'
 import { pickDriveFile } from '../lib/googleDrivePicker'
-import {
-  extractTextFromPdf,
-  extractTextFromImage,
-  isPdfFile,
-  isImageFile,
-} from '../lib/textExtraction'
+import { extractTextFromFile, isPdfFile, isImageFile, isClaudeConfigured } from '../lib/textExtraction'
 
 type Stage = 'select' | 'extracting' | 'review' | 'saved'
 
@@ -44,27 +39,30 @@ export default function ImportPassage() {
     setDriveSyncError(null)
   }
 
-  async function processFile(file: File) {
+  async function processFiles(files: File[]) {
+    if (files.length === 0) return
     setError(null)
     setProgress(0)
     setStage('extracting')
     try {
-      let text: string
-      if (isPdfFile(file)) {
-        setStatusMessage('正在解析 PDF…')
-        text = await extractTextFromPdf(file, (p, status) => {
-          setProgress(p)
-          setStatusMessage(status)
-        })
-      } else if (isImageFile(file)) {
-        setStatusMessage('正在识别图片中的文字…')
-        text = await extractTextFromImage(file, (p) => setProgress(p))
-      } else {
-        throw new Error('不支持的文件类型，请选择 PDF 或图片')
+      const texts: string[] = []
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        if (!isPdfFile(file) && !isImageFile(file)) {
+          throw new Error(`不支持的文件类型：${file.name}`)
+        }
+        setStatusMessage(
+          files.length > 1
+            ? `正在识别第 ${i + 1}/${files.length} 个文件（${file.name}）…`
+            : '正在识别文字…',
+        )
+        const text = await extractTextFromFile(file)
+        if (text.trim()) texts.push(text.trim())
+        setProgress((i + 1) / files.length)
       }
-      if (!text.trim()) throw new Error('没有识别到文字，请尝试其他文件')
-      setExtractedText(text.trim())
-      setTitle(file.name.replace(/\.[^.]+$/, ''))
+      if (texts.length === 0) throw new Error('没有识别到文字，请尝试其他文件')
+      setExtractedText(texts.join('\n\n'))
+      setTitle(files[0].name.replace(/\.[^.]+$/, ''))
       setStage('review')
     } catch (err) {
       setError(err instanceof Error ? err.message : '提取文字失败')
@@ -73,9 +71,9 @@ export default function ImportPassage() {
   }
 
   function handleLocalFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    void processFile(file).finally(() => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    void processFiles(Array.from(files)).finally(() => {
       if (fileInputRef.current) fileInputRef.current.value = ''
     })
   }
@@ -89,7 +87,7 @@ export default function ImportPassage() {
       setStatusMessage('正在从 Drive 下载文件…')
       const blob = await downloadFile(picked.id)
       const file = new File([blob], picked.name, { type: picked.mimeType })
-      await processFile(file)
+      await processFiles([file])
     } catch (err) {
       setError(err instanceof Error ? err.message : '从 Drive 导入失败')
       setStage('select')
@@ -126,23 +124,48 @@ export default function ImportPassage() {
         </div>
       )}
 
+      {!isClaudeConfigured() && (
+        <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800 space-y-2">
+          <p className="font-medium">⚠️ 尚未配置 Claude API 密钥</p>
+          <p>
+            文字提取功能需要 Claude API。请前往{' '}
+            <a
+              href="https://console.anthropic.com/settings/keys"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Anthropic Console
+            </a>{' '}
+            创建一个 API 密钥，然后在项目根目录的{' '}
+            <code className="bg-amber-100 px-1 rounded">.env.local</code> 文件中填入：
+          </p>
+          <pre className="bg-amber-100 rounded p-2 overflow-x-auto">VITE_ANTHROPIC_API_KEY=sk-ant-...</pre>
+          <p>
+            保存后重启 <code className="bg-amber-100 px-1 rounded">npm run dev</code>。
+          </p>
+        </section>
+      )}
+
       {stage === 'select' && (
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
           <div>
             <h2 className="font-bold text-slate-800 mb-2">📁 本地文件</h2>
             <p className="text-sm text-slate-500 mb-3">
-              选择一个 PDF 或图片文件（JPG / PNG / WEBP）。
+              选择一个或多个 PDF / 图片文件（JPG / PNG / WEBP），可多选。
             </p>
             <input
               ref={fileInputRef}
               type="file"
               accept=".pdf,application/pdf,image/*"
+              multiple
               onChange={handleLocalFile}
               className="hidden"
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-2 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition"
+              disabled={!isClaudeConfigured()}
+              className="px-4 py-2 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               选择文件
             </button>
@@ -159,7 +182,8 @@ export default function ImportPassage() {
                 </p>
                 <button
                   onClick={handleDrivePick}
-                  className="px-4 py-2 rounded-lg font-medium bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 transition"
+                  disabled={!isClaudeConfigured()}
+                  className="px-4 py-2 rounded-lg font-medium bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   从 Drive 选择
                 </button>

@@ -1,96 +1,94 @@
-import * as pdfjsLib from 'pdfjs-dist'
-import workerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url'
-import * as Tesseract from 'tesseract.js'
+import Anthropic from '@anthropic-ai/sdk'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
+const EXTRACTION_PROMPT = `你将看到一张儿童中文课文的图片或 PDF 文档。请提取其中课文正文部分的文字，要求：
+1. 只输出汉字课文正文，不要输出拼音、英文翻译、页眉页脚、页码、习题、插图说明等非正文内容。
+2. 按原文的分行和段落顺序输出，不要合并或调整段落。
+3. 不要添加任何解释、标题、Markdown 标记或其他多余内容，直接输出提取到的文字。
+4. 如果完全没有可识别的课文文字，只输出：（未识别到课文内容）`
 
-/** Render a PDF page to a canvas at a resolution suitable for OCR. */
-async function renderPageToCanvas(page: pdfjsLib.PDFPageProxy): Promise<HTMLCanvasElement> {
-  const viewport = page.getViewport({ scale: 2 })
-  const canvas = document.createElement('canvas')
-  canvas.width = viewport.width
-  canvas.height = viewport.height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('无法创建画布')
-  await page.render({ canvas, canvasContext: ctx, viewport }).promise
-  return canvas
-}
-
-/**
- * Extract text from a PDF, joining pages with blank lines. Pages that have
- * no text layer (e.g. scanned/photographed worksheets) are rendered to an
- * image and OCR'd with Tesseract instead.
- */
-export async function extractTextFromPdf(
-  file: File | Blob,
-  onProgress?: (progress: number, status: string) => void,
-): Promise<string> {
-  const data = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data }).promise
-  const pages: string[] = []
-  let ocrWorker: Tesseract.Worker | null = null
-
-  try {
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i)
-      const content = await page.getTextContent()
-      let text = ''
-      for (const item of content.items) {
-        if ('str' in item) {
-          text += item.str
-          if (item.hasEOL) text += '\n'
-        }
-      }
-      text = text.trim()
-
-      if (!text) {
-        onProgress?.((i - 1) / pdf.numPages, `正在识别第 ${i}/${pdf.numPages} 页（无文字层，使用 OCR）…`)
-        ocrWorker ??= await Tesseract.createWorker('chi_sim', undefined, {
-          logger: (m) => {
-            if (m.status === 'recognizing text') {
-              onProgress?.(
-                (i - 1 + m.progress) / pdf.numPages,
-                `正在识别第 ${i}/${pdf.numPages} 页（无文字层，使用 OCR）…`,
-              )
-            }
-          },
-        })
-        const canvas = await renderPageToCanvas(page)
-        const result = await ocrWorker.recognize(canvas)
-        text = result.data.text.trim()
-      }
-
-      pages.push(text)
-      onProgress?.(i / pdf.numPages, `正在解析第 ${i}/${pdf.numPages} 页…`)
-    }
-  } finally {
-    await ocrWorker?.terminate()
-  }
-
-  return pages.join('\n\n')
-}
-
-/**
- * OCR an image with Tesseract (Simplified Chinese model). The Chinese
- * language data (~10-15MB) is downloaded on first use and cached by the
- * browser afterwards.
- */
-export async function extractTextFromImage(
-  file: File | Blob,
-  onProgress?: (progress: number) => void,
-): Promise<string> {
-  const result = await Tesseract.recognize(file, 'chi_sim', {
-    logger: (m) => {
-      if (m.status === 'recognizing text') onProgress?.(m.progress)
-    },
-  })
-  return result.data.text
-}
+type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
 export function isPdfFile(file: File): boolean {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 }
 
 export function isImageFile(file: File): boolean {
-  return file.type.startsWith('image/')
+  return file.type.startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(file.name)
+}
+
+/** Whether the Claude API key is configured (`VITE_ANTHROPIC_API_KEY` in `.env.local`). */
+export function isClaudeConfigured(): boolean {
+  return Boolean(import.meta.env.VITE_ANTHROPIC_API_KEY)
+}
+
+function imageMediaType(file: File): ImageMediaType {
+  if (
+    file.type === 'image/jpeg' ||
+    file.type === 'image/png' ||
+    file.type === 'image/gif' ||
+    file.type === 'image/webp'
+  ) {
+    return file.type
+  }
+  const ext = file.name.toLowerCase().split('.').pop()
+  if (ext === 'png') return 'image/png'
+  if (ext === 'gif') return 'image/gif'
+  if (ext === 'webp') return 'image/webp'
+  return 'image/jpeg'
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
+
+/**
+ * Extract the passage text from an image or PDF using the Claude API.
+ * Throws if `VITE_ANTHROPIC_API_KEY` is not configured.
+ */
+export async function extractTextFromFile(file: File): Promise<string> {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+  if (!apiKey) {
+    throw new Error('未配置 VITE_ANTHROPIC_API_KEY，请按页面提示配置 Claude API 密钥')
+  }
+
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
+  const data = await fileToBase64(file)
+
+  const fileBlock = isPdfFile(file)
+    ? ({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } } as const)
+    : ({ type: 'image', source: { type: 'base64', media_type: imageMediaType(file), data } } as const)
+
+  try {
+    const stream = client.messages.stream({
+      model: 'claude-opus-4-8',
+      max_tokens: 8192,
+      messages: [
+        {
+          role: 'user',
+          content: [fileBlock, { type: 'text', text: EXTRACTION_PROMPT }],
+        },
+      ],
+    })
+    const message = await stream.finalMessage()
+    const textBlock = message.content.find((block) => block.type === 'text')
+    return textBlock?.text.trim() ?? ''
+  } catch (err) {
+    if (err instanceof Anthropic.AuthenticationError) {
+      throw new Error('Claude API 密钥无效，请检查 VITE_ANTHROPIC_API_KEY', { cause: err })
+    }
+    if (err instanceof Anthropic.RateLimitError) {
+      throw new Error('Claude API 请求过于频繁，请稍后再试', { cause: err })
+    }
+    if (err instanceof Anthropic.APIError) {
+      throw new Error(`Claude API 出错：${err.message}`, { cause: err })
+    }
+    throw err
+  }
 }
