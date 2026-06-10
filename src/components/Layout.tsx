@@ -21,7 +21,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2">
             <span className="text-2xl">📖</span>
             <span className="text-lg font-bold text-slate-800">
-              ReadIt <span className="text-slate-400 font-normal">识字小助手</span>
+              LeoReads <span className="text-slate-400 font-normal">识字小助手</span>
             </span>
           </div>
           <nav className="flex gap-1">

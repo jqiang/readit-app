@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-ReadIt (识字小助手) is a prototype for parent-led Chinese reading practice: a parent listens to a
+LeoReads (识字小助手) is a prototype for parent-led Chinese reading practice: a parent listens to a
 child read a passage aloud and taps characters to mark them as correct/wrong/learned, building up
 a personal character library with spaced-repetition review.
 

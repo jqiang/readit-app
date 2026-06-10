@@ -1,4 +1,4 @@
-# ReadIt 识字小助手
+# LeoReads 识字小助手
 
 A prototype for parent-led Chinese reading practice. A parent listens to a child read a passage
 aloud and taps characters to mark them as correct / wrong / newly-learned, building up a personal

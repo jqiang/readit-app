@@ -31,9 +31,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold text-slate-800">欢迎使用 ReadIt 📖</h1>
+        <h1 className="text-2xl font-bold text-slate-800">嗨，Leo！🦁📖</h1>
         <p className="text-slate-500 mt-1">
-          陪孩子轻松练习朗读，自动记录认字情况，针对性巩固生字。
+          准备好今天的阅读时间了吗？我们一起读故事、认汉字，每天都有新进步～
         </p>
       </section>
 
