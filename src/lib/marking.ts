@@ -12,7 +12,8 @@ export function initMarks(target: string): CharMark[] {
  * Cycle a character's mark. The available marks depend on whether the
  * character is already in the library (`isKnown`):
  * - Known:   unmarked (correct) -> wrong (misread) -> remove (shouldn't be known) -> unmarked
- * - Unknown: unmarked (not yet learned) -> learned (now knows it) -> unmarked
+ * - Unknown: unmarked (not yet learned) -> learned (knows it, read correctly) ->
+ *            wrong (knows it, but misread this time) -> unmarked
  */
 export function cycleMark(mark: CharMark, isKnown: boolean): CharMark {
   if (mark === 'skip') return mark
@@ -21,14 +22,17 @@ export function cycleMark(mark: CharMark, isKnown: boolean): CharMark {
     if (mark === 'wrong') return 'remove'
     return 'unmarked'
   }
-  return mark === 'unmarked' ? 'learned' : 'unmarked'
+  if (mark === 'unmarked') return 'learned'
+  if (mark === 'learned') return 'wrong'
+  return 'unmarked'
 }
 
 /**
  * Per-character results, ready to feed into the library store.
  * - Known characters: unmarked counts as correct, 'wrong' as wrong, 'remove'
  *   removes the character from the library.
- * - Unknown characters: only 'learned' produces a result (adds to library);
+ * - Unknown characters: 'learned' adds to the library as a correct first
+ *   read; 'wrong' also adds to the library but as a misread first attempt.
  *   unmarked stays out of the library entirely.
  */
 export function getCharResults(
@@ -47,6 +51,8 @@ export function getCharResults(
       results.push({ char, outcome })
     } else if (mark === 'learned') {
       results.push({ char, outcome: 'learn' })
+    } else if (mark === 'wrong') {
+      results.push({ char, outcome: 'learnWrong' })
     }
   })
   return results

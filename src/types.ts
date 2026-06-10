@@ -10,7 +10,7 @@ export interface CharacterStats {
   nextReview: number
 }
 
-export type CharOutcome = 'correct' | 'wrong' | 'learn' | 'remove'
+export type CharOutcome = 'correct' | 'wrong' | 'learn' | 'learnWrong' | 'remove'
 
 export interface CharResult {
   char: string

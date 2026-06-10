@@ -43,6 +43,13 @@ export const useLibraryStore = create<LibraryState>()(
             }
             continue
           }
+          if (outcome === 'learnWrong') {
+            learnedChars.push(char)
+            wrongChars.push(char)
+            const existing = characters[char] ?? newCharacterStats(char, now)
+            characters[char] = applyAttempt(existing, false, now)
+            continue
+          }
           if (outcome === 'remove') {
             removedChars.push(char)
             delete characters[char]

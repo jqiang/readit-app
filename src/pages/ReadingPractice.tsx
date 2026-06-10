@@ -118,8 +118,12 @@ export default function ReadingPractice() {
       correct: results.filter((r) => r.outcome === 'correct').length,
       total: results.filter((r) => r.outcome === 'correct' || r.outcome === 'wrong')
         .length,
-      wrongChars: results.filter((r) => r.outcome === 'wrong').map((r) => r.char),
-      learnedChars: results.filter((r) => r.outcome === 'learn').map((r) => r.char),
+      wrongChars: results
+        .filter((r) => r.outcome === 'wrong' || r.outcome === 'learnWrong')
+        .map((r) => r.char),
+      learnedChars: results
+        .filter((r) => r.outcome === 'learn' || r.outcome === 'learnWrong')
+        .map((r) => r.char),
       removedChars: results.filter((r) => r.outcome === 'remove').map((r) => r.char),
     })
   }
@@ -223,7 +227,9 @@ export default function ReadingPractice() {
               生字本里<strong className="text-slate-700">还没有</strong>
               的字（上方显示拼音）：不点 = 暂不收录；点一下变成{' '}
               <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">绿色</span>
-              ＝他已经认识了，加入生字本；再点一下恢复默认。
+              ＝他已经认识了，加入生字本；再点一下变成{' '}
+              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-600">红色</span>
+              ＝他认识，但这次读错了，也加入生字本；再点一下恢复默认。
             </p>
           </section>
 
