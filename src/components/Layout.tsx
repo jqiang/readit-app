@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 
 const navItems = [
   { to: '/', label: '首页', icon: '🏠' },
@@ -11,6 +11,9 @@ const navItems = [
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  const isFullWidth = pathname === '/read'
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
@@ -42,7 +45,11 @@ export default function Layout({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-6">{children}</main>
+      <main
+        className={`flex-1 mx-auto px-4 py-6 ${isFullWidth ? 'w-[80%]' : 'w-full max-w-4xl'}`}
+      >
+        {children}
+      </main>
       <footer className="text-center text-xs text-slate-400 py-4">
         原型演示 · 数据保存在本地浏览器中
       </footer>
