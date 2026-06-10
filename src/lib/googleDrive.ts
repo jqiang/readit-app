@@ -79,6 +79,41 @@ export interface DriveUser {
   name: string
 }
 
+const TOKEN_STORAGE_KEY = 'readit-drive-token'
+
+interface StoredToken {
+  accessToken: string
+  expiresAt: number
+}
+
+function loadStoredToken(): StoredToken | null {
+  try {
+    const raw = localStorage.getItem(TOKEN_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StoredToken>
+    if (typeof parsed.accessToken !== 'string' || typeof parsed.expiresAt !== 'number') return null
+    return parsed as StoredToken
+  } catch {
+    return null
+  }
+}
+
+function storeToken(token: string, expiresAt: number): void {
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({ accessToken: token, expiresAt }))
+  } catch {
+    // localStorage unavailable (e.g. private browsing) — token just won't survive a reload
+  }
+}
+
+function clearStoredToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 let tokenClient: TokenClient | null = null
 let accessToken: string | null = null
 let tokenExpiresAt = 0
@@ -119,12 +154,20 @@ async function ensureTokenClient(): Promise<TokenClient> {
 
 /**
  * Get a valid access token, requesting one from Google if needed.
- * `interactive=false` tries a silent (no-UI) refresh first, useful for
- * background sync after a page reload; `interactive=true` shows the
- * Google account/consent prompt.
+ * Reuses a cached token from `localStorage` across page reloads while it's
+ * still valid. `interactive=false` falls back to a silent (no-UI) refresh;
+ * `interactive=true` shows the Google account/consent prompt.
  */
 async function requestToken(interactive: boolean): Promise<string> {
   if (accessToken && Date.now() < tokenExpiresAt - 60_000) return accessToken
+
+  const stored = loadStoredToken()
+  if (stored && Date.now() < stored.expiresAt - 60_000) {
+    accessToken = stored.accessToken
+    tokenExpiresAt = stored.expiresAt
+    return accessToken
+  }
+
   const client = await ensureTokenClient()
 
   return new Promise<string>((resolve, reject) => {
@@ -148,6 +191,7 @@ async function requestToken(interactive: boolean): Promise<string> {
       }
       accessToken = resp.access_token
       tokenExpiresAt = Date.now() + Number(resp.expires_in) * 1000
+      storeToken(accessToken, tokenExpiresAt)
       resolve(accessToken)
     }
     client.requestAccessToken({ prompt: interactive ? 'consent' : '' })
@@ -160,6 +204,7 @@ export function disconnect(): void {
   }
   accessToken = null
   tokenExpiresAt = 0
+  clearStoredToken()
 }
 
 async function getDriveUser(token: string): Promise<DriveUser> {
