@@ -6,12 +6,15 @@ import CharacterLibrary from './pages/CharacterLibrary'
 import ReviewMode from './pages/ReviewMode'
 import Settings from './pages/Settings'
 import ImportPassage from './pages/ImportPassage'
+import { useLibraryBackup } from './hooks/useLibraryBackup'
 
 // One-time cleanup: locally-stored imported passages were replaced by the
 // Drive-backed "ReadIt 课文" folder.
 localStorage.removeItem('readit-passages')
 
 export default function App() {
+  useLibraryBackup()
+
   return (
     <HashRouter>
       <Layout>
