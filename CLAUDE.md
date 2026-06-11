@@ -68,7 +68,7 @@ HashRouter. `tsconfig` has `noUnusedLocals`/`noUnusedParameters`/`verbatimModule
 
 ## Google Cloud / Drive integration
 
-- Project: `gdrive-api-499011` (Google Cloud Console), account `qjqivy@gmail.com`.
+- Project: see `gcloud config get-value project` (Google Cloud Console), under your own Google account.
 - APIs enabled: Google Drive API, Google Picker API, API Keys API.
 - Required env vars in `.env.local` (gitignored; see `.env.local.example`):
   - `VITE_GOOGLE_CLIENT_ID` — OAuth 2.0 Client ID (Web application), authorized JS origin

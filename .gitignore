@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
