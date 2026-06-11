@@ -117,19 +117,21 @@ export default function Settings() {
         {drive.error && <p className="text-sm text-rose-600">{drive.error}</p>}
       </section>
 
-      <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-2">
-        <h2 className="font-bold text-slate-800">📄 导入课文</h2>
-        <p className="text-sm text-slate-500">
-          从 PDF 或图片中提取文字，生成新课文。支持本地上传，连接 Google Drive 后还可以直接从
-          Drive 中选择文件。
-        </p>
-        <Link
-          to="/import"
-          className="inline-block px-4 py-2 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition"
-        >
-          前往导入页面
-        </Link>
-      </section>
+      {import.meta.env.DEV && (
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-2">
+          <h2 className="font-bold text-slate-800">📄 导入课文</h2>
+          <p className="text-sm text-slate-500">
+            从 PDF 或图片中提取文字，生成新课文。支持本地上传，连接 Google Drive 后还可以直接从
+            Drive 中选择文件。
+          </p>
+          <Link
+            to="/import"
+            className="inline-block px-4 py-2 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition"
+          >
+            前往导入页面
+          </Link>
+        </section>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { HashRouter, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import ReadingPractice from './pages/ReadingPractice'
@@ -23,7 +23,10 @@ export default function App() {
           <Route path="/read" element={<ReadingPractice />} />
           <Route path="/library" element={<CharacterLibrary />} />
           <Route path="/review" element={<ReviewMode />} />
-          <Route path="/import" element={<ImportPassage />} />
+          <Route
+            path="/import"
+            element={import.meta.env.DEV ? <ImportPassage /> : <Navigate to="/" replace />}
+          />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
