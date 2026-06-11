@@ -16,11 +16,12 @@ function speak(text: string) {
 export default function ReviewMode() {
   const characters = useLibraryStore((s) => s.characters)
   const recordReview = useLibraryStore((s) => s.recordReview)
+  const removeCharacter = useLibraryStore((s) => s.removeCharacter)
 
   const [queue, setQueue] = useState<string[] | null>(null)
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
-  const [tally, setTally] = useState({ correct: 0, wrong: 0 })
+  const [tally, setTally] = useState({ correct: 0, wrong: 0, removed: 0 })
 
   const dueCount = useMemo(() => {
     const now = Date.now()
@@ -38,7 +39,7 @@ export default function ReviewMode() {
     setQueue(sorted.slice(0, QUEUE_SIZE).map((c) => c.char))
     setIndex(0)
     setRevealed(false)
-    setTally({ correct: 0, wrong: 0 })
+    setTally({ correct: 0, wrong: 0, removed: 0 })
   }
 
   function answer(correct: boolean) {
@@ -47,6 +48,14 @@ export default function ReviewMode() {
     setTally((t) =>
       correct ? { ...t, correct: t.correct + 1 } : { ...t, wrong: t.wrong + 1 },
     )
+    setRevealed(false)
+    setIndex((i) => i + 1)
+  }
+
+  function removeAndAdvance() {
+    if (!queue) return
+    removeCharacter(queue[index])
+    setTally((t) => ({ ...t, removed: t.removed + 1 }))
     setRevealed(false)
     setIndex((i) => i + 1)
   }
@@ -94,6 +103,7 @@ export default function ReviewMode() {
         <h2 className="text-lg font-bold text-slate-700">本轮复习完成！</h2>
         <p className="text-slate-500">
           认识 {tally.correct} 个 · 不熟悉 {tally.wrong} 个
+          {tally.removed > 0 && ` · 移出生字本 ${tally.removed} 个`}
         </p>
         <div className="flex justify-center gap-3">
           <button
@@ -168,6 +178,12 @@ export default function ReviewMode() {
           ✓ 认识
         </button>
       </div>
+      <button
+        onClick={removeAndAdvance}
+        className="w-full py-2 rounded-xl text-sm text-slate-400 border border-dashed border-slate-200 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 transition"
+      >
+        🗑 还没学过，移出生字本
+      </button>
     </div>
   )
 }

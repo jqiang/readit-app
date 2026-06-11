@@ -15,6 +15,7 @@ const FILTERS: Array<{ key: Mastery | 'all'; label: string }> = [
 export default function CharacterLibrary() {
   const characters = useLibraryStore((s) => s.characters)
   const addKnownCharacters = useLibraryStore((s) => s.addKnownCharacters)
+  const removeCharacter = useLibraryStore((s) => s.removeCharacter)
   const [filter, setFilter] = useState<Mastery | 'all'>('all')
   const [search, setSearch] = useState('')
   const [input, setInput] = useState('')
@@ -63,6 +64,12 @@ export default function CharacterLibrary() {
         : '这些字都已经在生字本中了',
     )
     setInput('')
+  }
+
+  function handleRemove(char: string) {
+    if (confirm(`确定要把「${char}」移出生字本吗？`)) {
+      removeCharacter(char)
+    }
   }
 
   return (
@@ -150,8 +157,15 @@ export default function CharacterLibrary() {
                 return (
                   <div
                     key={stats.char}
-                    className="bg-white rounded-xl border border-slate-200 p-4 text-center"
+                    className="relative bg-white rounded-xl border border-slate-200 p-4 text-center"
                   >
+                    <button
+                      onClick={() => handleRemove(stats.char)}
+                      title="移出生字本"
+                      className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
+                    >
+                      🗑
+                    </button>
                     <div className="text-4xl mb-1">{stats.char}</div>
                     <div className="text-sm text-slate-400 mb-2">
                       {charPinyin(stats.char)}

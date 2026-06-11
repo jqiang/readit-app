@@ -14,6 +14,8 @@ interface LibraryState {
   ) => void
   /** Record the outcome of a single flashcard review. */
   recordReview: (char: string, correct: boolean) => void
+  /** Remove a character from the library entirely (e.g. it wasn't actually learned yet). */
+  removeCharacter: (char: string) => void
   /** Manually register characters the child is already expected to know. Returns how many were newly added. */
   addKnownCharacters: (chars: string[]) => number
   resetAll: () => void
@@ -86,6 +88,12 @@ export const useLibraryStore = create<LibraryState>()(
         const characters = { ...get().characters }
         const existing = characters[char] ?? newCharacterStats(char, now)
         characters[char] = applyAttempt(existing, correct, now)
+        set({ characters })
+      },
+
+      removeCharacter: (char) => {
+        const characters = { ...get().characters }
+        delete characters[char]
         set({ characters })
       },
 
