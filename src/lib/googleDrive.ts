@@ -48,7 +48,14 @@ declare global {
 export interface LibraryBackup {
   characters: Record<string, CharacterStats>
   sessions: ReadingSession[]
+  /** Epoch ms when this data was last modified locally; used to detect stale pushes/pulls. */
+  lastModified: number
 }
+
+export type PushResult =
+  | { status: 'pushed' }
+  /** Remote backup is newer than the local data being pushed — upload was skipped to avoid data loss. */
+  | { status: 'skipped-stale'; remoteLastModified: number }
 
 export interface DriveUser {
   email: string
@@ -346,11 +353,33 @@ async function uploadBackupFile(
   if (!res.ok) throw new Error(`同步到云端失败 (${res.status})`)
 }
 
-/** Push the local library (characters + sessions) to the hidden Drive app-data folder. */
-export async function pushLibrary(data: LibraryBackup): Promise<void> {
+async function downloadBackupContent(token: string, fileId: string): Promise<LibraryBackup> {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) throw new Error(`下载云端备份失败 (${res.status})`)
+  return res.json()
+}
+
+/**
+ * Push the local library (characters + sessions) to the hidden Drive app-data
+ * folder. If a backup already exists and its `lastModified` is newer than
+ * `data.lastModified`, the push is skipped — this prevents stale or empty
+ * local state (e.g. a cleared localStorage) from clobbering newer data
+ * synced from another device.
+ */
+export async function pushLibrary(data: LibraryBackup): Promise<PushResult> {
   const token = await requestToken(false)
   const existing = await findBackupFile(token)
+  if (existing) {
+    const remote = await downloadBackupContent(token, existing.id)
+    if ((remote.lastModified ?? 0) > data.lastModified) {
+      return { status: 'skipped-stale', remoteLastModified: remote.lastModified }
+    }
+  }
   await uploadBackupFile(token, JSON.stringify(data), existing?.id ?? null)
+  return { status: 'pushed' }
 }
 
 /** Pull the library backup from Drive, or null if no backup exists yet. */
@@ -358,12 +387,7 @@ export async function pullLibrary(): Promise<LibraryBackup | null> {
   const token = await requestToken(false)
   const existing = await findBackupFile(token)
   if (!existing) return null
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
-  if (!res.ok) throw new Error(`下载云端备份失败 (${res.status})`)
-  return res.json()
+  return downloadBackupContent(token, existing.id)
 }
 
 async function findPassageFolder(token: string): Promise<string | null> {

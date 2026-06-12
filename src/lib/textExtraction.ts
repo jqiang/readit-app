@@ -9,6 +9,16 @@ const EXTRACTION_PROMPT = `你将看到一张儿童中文课文的图片或 PDF 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 type FileMediaType = 'application/pdf' | ImageMediaType
 
+/**
+ * Vercel Edge Functions cap the request body at ~4MB. Base64 inflates a file
+ * by ~33%, so keep raw uploads under this to leave headroom for the JSON
+ * wrapper and proxy overhead — otherwise the deployed `/api/extract-text`
+ * fails with FUNCTION_PAYLOAD_TOO_LARGE (this limit isn't enforced by `vercel
+ * dev`, so it can pass locally and fail in production).
+ */
+const MAX_UPLOAD_BYTES = 2.5 * 1024 * 1024
+const MAX_IMAGE_DIMENSION = 2048
+
 export function isPdfFile(file: File): boolean {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 }
@@ -45,8 +55,8 @@ function imageMediaType(file: File): ImageMediaType {
   return 'image/jpeg'
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer()
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer()
   const bytes = new Uint8Array(buffer)
   let binary = ''
   const chunkSize = 0x8000
@@ -54,6 +64,38 @@ async function fileToBase64(file: File): Promise<string> {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
   }
   return btoa(binary)
+}
+
+function canvasToJpegBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('图片压缩失败'))), 'image/jpeg', quality)
+  })
+}
+
+/** Downscale and re-encode a large image as JPEG so it fits under MAX_UPLOAD_BYTES. */
+async function compressImage(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  let { width, height } = bitmap
+  if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+    const scale = MAX_IMAGE_DIMENSION / Math.max(width, height)
+    width = Math.round(width * scale)
+    height = Math.round(height * scale)
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('无法压缩图片')
+  ctx.drawImage(bitmap, 0, 0, width, height)
+  bitmap.close()
+
+  let quality = 0.85
+  let blob = await canvasToJpegBlob(canvas, quality)
+  while (blob.size > MAX_UPLOAD_BYTES && quality > 0.35) {
+    quality -= 0.15
+    blob = await canvasToJpegBlob(canvas, quality)
+  }
+  return blob
 }
 
 function fileBlockFor(mediaType: FileMediaType, data: string) {
@@ -119,8 +161,25 @@ async function extractViaApi(mediaType: FileMediaType, data: string): Promise<st
 
 /** Extract the passage text from an image or PDF using the Claude API. */
 export async function extractTextFromFile(file: File): Promise<string> {
-  const data = await fileToBase64(file)
-  const mediaType: FileMediaType = isPdfFile(file) ? 'application/pdf' : imageMediaType(file)
+  let data: string
+  let mediaType: FileMediaType
+
+  if (isPdfFile(file)) {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      const limitMb = MAX_UPLOAD_BYTES / 1024 / 1024
+      throw new Error(
+        `PDF 文件过大（约 ${(file.size / 1024 / 1024).toFixed(1)}MB），请使用小于 ${limitMb}MB 的 PDF，或将页面截图为图片后再上传。`,
+      )
+    }
+    data = await blobToBase64(file)
+    mediaType = 'application/pdf'
+  } else if (file.size > MAX_UPLOAD_BYTES) {
+    data = await blobToBase64(await compressImage(file))
+    mediaType = 'image/jpeg'
+  } else {
+    data = await blobToBase64(file)
+    mediaType = imageMediaType(file)
+  }
 
   if (import.meta.env.DEV && import.meta.env.VITE_ANTHROPIC_API_KEY) {
     return extractViaAnthropicSdk(mediaType, data)

@@ -6,6 +6,9 @@ import { applyAttempt, newCharacterStats } from '../lib/mastery'
 interface LibraryState {
   characters: Record<string, CharacterStats>
   sessions: ReadingSession[]
+  /** Epoch ms of the last local mutation; 0 if never modified. Used to avoid
+   * clobbering newer Drive backups with stale/empty local data. */
+  lastModified: number
   /** Record the outcome of a full reading-practice session. */
   recordSession: (
     passageId: string,
@@ -27,6 +30,7 @@ export const useLibraryStore = create<LibraryState>()(
     (set, get) => ({
       characters: {},
       sessions: [],
+      lastModified: 0,
 
       recordSession: (passageId, passageTitle, results) => {
         const now = Date.now()
@@ -80,6 +84,7 @@ export const useLibraryStore = create<LibraryState>()(
         set({
           characters,
           sessions: [session, ...get().sessions].slice(0, 50),
+          lastModified: now,
         })
       },
 
@@ -88,13 +93,13 @@ export const useLibraryStore = create<LibraryState>()(
         const characters = { ...get().characters }
         const existing = characters[char] ?? newCharacterStats(char, now)
         characters[char] = applyAttempt(existing, correct, now)
-        set({ characters })
+        set({ characters, lastModified: now })
       },
 
       removeCharacter: (char) => {
         const characters = { ...get().characters }
         delete characters[char]
-        set({ characters })
+        set({ characters, lastModified: Date.now() })
       },
 
       addKnownCharacters: (chars) => {
@@ -106,11 +111,11 @@ export const useLibraryStore = create<LibraryState>()(
           characters[char] = newCharacterStats(char, now)
           added++
         }
-        if (added > 0) set({ characters })
+        if (added > 0) set({ characters, lastModified: now })
         return added
       },
 
-      resetAll: () => set({ characters: {}, sessions: [] }),
+      resetAll: () => set({ characters: {}, sessions: [], lastModified: Date.now() }),
 
       seedDemoData: () => {
         const now = Date.now()
@@ -182,7 +187,7 @@ export const useLibraryStore = create<LibraryState>()(
           },
         ]
 
-        set({ characters, sessions })
+        set({ characters, sessions, lastModified: now })
       },
     }),
     { name: 'readit-library' },
