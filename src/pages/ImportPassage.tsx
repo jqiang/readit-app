@@ -94,6 +94,13 @@ export default function ImportPassage() {
     }
   }
 
+  function handleManualEntry() {
+    setError(null)
+    setExtractedText('')
+    setTitle('')
+    setStage('review')
+  }
+
   function handleSave() {
     if (!title.trim() || !extractedText.trim() || !driveReady) return
     const trimmedTitle = title.trim()
@@ -179,6 +186,17 @@ export default function ImportPassage() {
           </div>
 
           <div className="border-t border-slate-100 pt-4">
+            <h2 className="font-bold text-slate-800 mb-2">✏️ 手动输入</h2>
+            <p className="text-sm text-slate-500 mb-3">直接输入标题和课文内容，不使用文字识别。</p>
+            <button
+              onClick={handleManualEntry}
+              className="px-4 py-2 rounded-lg font-medium bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 transition"
+            >
+              手动输入
+            </button>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4">
             <h2 className="font-bold text-slate-800 mb-2">☁️ Google Drive</h2>
             {!isDriveConfigured() || !driveConnected ? (
               <p className="text-sm text-slate-400">请先在「设置」中连接 Google Drive。</p>
@@ -222,6 +240,7 @@ export default function ImportPassage() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              placeholder="课文标题"
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
             />
           </div>
@@ -231,6 +250,7 @@ export default function ImportPassage() {
               value={extractedText}
               onChange={(e) => setExtractedText(e.target.value)}
               rows={10}
+              placeholder="输入课文内容…"
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm leading-relaxed"
             />
             <p className="text-xs text-slate-400 mt-1">可以手动修正识别错误的文字。</p>
