@@ -169,10 +169,11 @@ export async function handleOAuthRedirect(): Promise<DriveUser | null> {
   sessionStorage.removeItem(OAUTH_RETURN_HASH_KEY)
 
   // Clean ?code/?state/?error from the URL and restore the route the user was on.
-  // `replaceState` doesn't fire `hashchange`, so `HashRouter` won't notice the
-  // new hash on its own — dispatch one so it re-renders the restored route.
-  window.history.replaceState(null, '', window.location.pathname + returnHash)
-  window.dispatchEvent(new HashChangeEvent('hashchange'))
+  // `replaceState` doesn't fire `popstate`, so `HashRouter` (whose history
+  // listens for `popstate`, not `hashchange`) won't notice the new hash on its
+  // own — dispatch one so it re-renders the restored route.
+  window.history.replaceState({ ...window.history.state }, '', window.location.pathname + returnHash)
+  window.dispatchEvent(new PopStateEvent('popstate'))
 
   if (error) throw new Error(`Google 授权失败：${error}`)
   if (returnedState !== expectedState) throw new Error('登录状态校验失败，请重试')
