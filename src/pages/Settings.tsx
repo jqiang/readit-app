@@ -75,7 +75,7 @@ export default function Settings() {
                 ? `上次同步：${new Date(drive.lastSyncedAt).toLocaleString('zh-CN')}`
                 : '还没有同步过'}
             </p>
-            <p className="text-xs text-slate-400">已开启自动备份：每 60 秒推送到云端</p>
+            <p className="text-xs text-slate-400">已开启自动同步：每 60 秒与云端互相同步</p>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={drive.pushToCloud}

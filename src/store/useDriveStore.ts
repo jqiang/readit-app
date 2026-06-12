@@ -16,6 +16,7 @@ interface DriveState {
   disconnect: () => void
   pushToCloud: () => Promise<void>
   pullFromCloud: () => Promise<void>
+  syncWithCloud: () => Promise<void>
 }
 
 export const useDriveStore = create<DriveState>()(
@@ -77,6 +78,30 @@ export const useDriveStore = create<DriveState>()(
             sessions: data.sessions ?? [],
             lastModified: data.lastModified ?? Date.now(),
           })
+          set({ status: 'idle', lastSyncedAt: Date.now() })
+        } catch (e) {
+          set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+        }
+      },
+
+      // Periodic background sync: pull in any newer data from another device
+      // first, then push the (possibly merged) local state back to the cloud.
+      syncWithCloud: async () => {
+        set({ status: 'syncing', error: null })
+        try {
+          const remote = await drive.pullLibrary()
+          if (remote) {
+            const localLastModified = useLibraryStore.getState().lastModified
+            if ((remote.lastModified ?? 0) > localLastModified) {
+              useLibraryStore.setState({
+                characters: remote.characters ?? {},
+                sessions: remote.sessions ?? [],
+                lastModified: remote.lastModified ?? Date.now(),
+              })
+            }
+          }
+          const { characters, sessions, lastModified } = useLibraryStore.getState()
+          await drive.pushLibrary({ characters, sessions, lastModified })
           set({ status: 'idle', lastSyncedAt: Date.now() })
         } catch (e) {
           set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
