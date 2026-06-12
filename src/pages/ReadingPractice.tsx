@@ -232,18 +232,11 @@ export default function ReadingPractice() {
               <div className="text-sm text-slate-400 p-3">正在加载课文列表…</div>
             ) : books.length === 0 ? (
               <div className="bg-white rounded-xl border border-slate-200 p-4 text-sm text-slate-500">
-                「ReadIt 课文」文件夹里还没有课文。
-                {import.meta.env.DEV && (
-                  <>
-                    可以去{' '}
-                    <Link to="/import" className="text-indigo-600 underline">
-                      导入课文
-                    </Link>
-                    ，或者
-                  </>
-                )}
-                {!import.meta.env.DEV && '可以'}
-                直接在 Google Drive 的该文件夹里放入 .txt 文件，然后点刷新。
+                「ReadIt 课文」文件夹里还没有课文。可以去{' '}
+                <Link to="/import" className="text-indigo-600 underline">
+                  导入课文
+                </Link>
+                ，或者直接在 Google Drive 的该文件夹里放入 .txt 文件，然后点刷新。
               </div>
             ) : (
               <>

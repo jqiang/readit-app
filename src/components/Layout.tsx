@@ -6,8 +6,7 @@ const navItems = [
   { to: '/read', label: '朗读练习', icon: '📖' },
   { to: '/library', label: '生字本', icon: '📚' },
   { to: '/review', label: '巩固复习', icon: '🎯' },
-  // Import uses a Claude API key that's only configured for local dev.
-  ...(import.meta.env.DEV ? [{ to: '/import', label: '导入课文', icon: '📥' }] : []),
+  { to: '/import', label: '导入课文', icon: '📥' },
   { to: '/settings', label: '设置', icon: '⚙️' },
 ]
 

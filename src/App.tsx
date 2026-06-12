@@ -1,4 +1,4 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import ReadingPractice from './pages/ReadingPractice'
@@ -7,12 +7,14 @@ import ReviewMode from './pages/ReviewMode'
 import Settings from './pages/Settings'
 import ImportPassage from './pages/ImportPassage'
 import { useLibraryBackup } from './hooks/useLibraryBackup'
+import { useGoogleOAuthRedirect } from './hooks/useGoogleOAuthRedirect'
 
 // One-time cleanup: locally-stored imported passages were replaced by the
 // Drive-backed "ReadIt 课文" folder.
 localStorage.removeItem('readit-passages')
 
 export default function App() {
+  useGoogleOAuthRedirect()
   useLibraryBackup()
 
   return (
@@ -23,10 +25,7 @@ export default function App() {
           <Route path="/read" element={<ReadingPractice />} />
           <Route path="/library" element={<CharacterLibrary />} />
           <Route path="/review" element={<ReviewMode />} />
-          <Route
-            path="/import"
-            element={import.meta.env.DEV ? <ImportPassage /> : <Navigate to="/" replace />}
-          />
+          <Route path="/import" element={<ImportPassage />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>

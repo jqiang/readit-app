@@ -12,6 +12,7 @@ dist
 dist-ssr
 .vite
 *.local
+.env.server
 
 # Claude Code runtime artifacts
 .claude/scheduled_tasks.lock
@@ -26,3 +27,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel

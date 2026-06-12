@@ -126,9 +126,22 @@ export default function ImportPassage() {
 
       {!isClaudeConfigured() && (
         <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800 space-y-2">
-          <p className="font-medium">⚠️ 尚未配置 Claude API 密钥</p>
+          <p className="font-medium">ℹ️ 未配置 VITE_ANTHROPIC_API_KEY</p>
           <p>
-            文字提取功能需要 Claude API。请前往{' '}
+            提取文字会通过{' '}
+            <code className="bg-amber-100 px-1 rounded">/api/extract-text</code> 代理调用 Claude
+            API —— 这需要用{' '}
+            <code className="bg-amber-100 px-1 rounded">npx vercel dev</code> 启动（而不是{' '}
+            <code className="bg-amber-100 px-1 rounded">npm run dev</code>），并在{' '}
+            <code className="bg-amber-100 px-1 rounded">.env.local</code> 中配置好{' '}
+            <code className="bg-amber-100 px-1 rounded">ANTHROPIC_API_KEY</code> 和{' '}
+            <code className="bg-amber-100 px-1 rounded">ALLOWED_EMAIL</code>。
+          </p>
+          <p>
+            如果只想用 <code className="bg-amber-100 px-1 rounded">npm run dev</code>，可以在{' '}
+            <code className="bg-amber-100 px-1 rounded">.env.local</code> 中额外配置{' '}
+            <code className="bg-amber-100 px-1 rounded">VITE_ANTHROPIC_API_KEY</code>
+            （从{' '}
             <a
               href="https://console.anthropic.com/settings/keys"
               target="_blank"
@@ -137,12 +150,7 @@ export default function ImportPassage() {
             >
               Anthropic Console
             </a>{' '}
-            创建一个 API 密钥，然后在项目根目录的{' '}
-            <code className="bg-amber-100 px-1 rounded">.env.local</code> 文件中填入：
-          </p>
-          <pre className="bg-amber-100 rounded p-2 overflow-x-auto">VITE_ANTHROPIC_API_KEY=sk-ant-...</pre>
-          <p>
-            保存后重启 <code className="bg-amber-100 px-1 rounded">npm run dev</code>。
+            获取），让浏览器直接调用 Claude API，然后重启开发服务器。
           </p>
         </section>
       )}
@@ -164,7 +172,6 @@ export default function ImportPassage() {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              disabled={!isClaudeConfigured()}
               className="px-4 py-2 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               选择文件
@@ -182,7 +189,6 @@ export default function ImportPassage() {
                 </p>
                 <button
                   onClick={handleDrivePick}
-                  disabled={!isClaudeConfigured()}
                   className="px-4 py-2 rounded-lg font-medium bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   从 Drive 选择

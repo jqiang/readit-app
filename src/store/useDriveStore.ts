@@ -12,7 +12,7 @@ interface DriveState {
   lastSyncedAt: number | null
   status: SyncStatus
   error: string | null
-  connect: () => Promise<void>
+  connect: () => void
   disconnect: () => void
   pushToCloud: () => Promise<void>
   pullFromCloud: () => Promise<void>
@@ -28,14 +28,9 @@ export const useDriveStore = create<DriveState>()(
       status: 'idle',
       error: null,
 
-      connect: async () => {
+      connect: () => {
         set({ status: 'connecting', error: null })
-        try {
-          const { email, name } = await drive.connect()
-          set({ connected: true, email, name, status: 'idle' })
-        } catch (e) {
-          set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
-        }
+        drive.connect()
       },
 
       disconnect: () => {

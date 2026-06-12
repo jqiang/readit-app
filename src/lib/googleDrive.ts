@@ -5,20 +5,6 @@ const SCOPES =
 const FILE_NAME = 'readit-library.json'
 const PASSAGE_FOLDER_NAME = 'ReadIt 课文'
 
-interface TokenResponse {
-  access_token: string
-  expires_in: number
-  scope: string
-  token_type: string
-  error?: string
-  error_description?: string
-}
-
-interface TokenClient {
-  callback: (response: TokenResponse) => void
-  requestAccessToken(overrideConfig?: { prompt?: string }): void
-}
-
 export interface PickerDocsView {
   setIncludeFolders(include: boolean): PickerDocsView
   setMimeTypes(mimeTypes: string): PickerDocsView
@@ -49,16 +35,6 @@ declare global {
       load(api: string, callback: () => void): void
     }
     google?: {
-      accounts: {
-        oauth2: {
-          initTokenClient(config: {
-            client_id: string
-            scope: string
-            callback: (response: TokenResponse) => void
-          }): TokenClient
-          revoke(token: string, callback: () => void): void
-        }
-      }
       picker: {
         PickerBuilder: new () => PickerBuilder
         DocsView: new (viewId?: string) => PickerDocsView
@@ -79,11 +55,20 @@ export interface DriveUser {
   name: string
 }
 
+interface GoogleTokenResponse {
+  access_token: string
+  refresh_token?: string
+  expires_in: number
+}
+
 const TOKEN_STORAGE_KEY = 'readit-drive-token'
+const OAUTH_STATE_KEY = 'readit-oauth-state'
+const OAUTH_RETURN_HASH_KEY = 'readit-oauth-return-hash'
 
 interface StoredToken {
   accessToken: string
   expiresAt: number
+  refreshToken?: string
 }
 
 function loadStoredToken(): StoredToken | null {
@@ -98,9 +83,11 @@ function loadStoredToken(): StoredToken | null {
   }
 }
 
-function storeToken(token: string, expiresAt: number): void {
+function storeToken(accessToken: string, expiresAt: number, refreshToken: string | null): void {
   try {
-    localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({ accessToken: token, expiresAt }))
+    const data: StoredToken = { accessToken, expiresAt }
+    if (refreshToken) data.refreshToken = refreshToken
+    localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(data))
   } catch {
     // localStorage unavailable (e.g. private browsing) — token just won't survive a reload
   }
@@ -114,95 +101,159 @@ function clearStoredToken(): void {
   }
 }
 
-let tokenClient: TokenClient | null = null
 let accessToken: string | null = null
 let tokenExpiresAt = 0
-let gsiLoadPromise: Promise<void> | null = null
+let refreshToken: string | null = null
 
 export function isConfigured(): boolean {
   return Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID)
 }
 
-function loadGsi(): Promise<void> {
-  if (window.google?.accounts?.oauth2) return Promise.resolve()
-  if (gsiLoadPromise) return gsiLoadPromise
-  gsiLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('无法加载 Google 登录脚本，请检查网络连接'))
-    document.head.appendChild(script)
-  })
-  return gsiLoadPromise
+/** The redirect URI Google sends the user back to after sign-in. Must match
+ * an "Authorized redirect URI" registered on the OAuth client exactly,
+ * including the trailing slash. */
+function getRedirectUri(): string {
+  return `${window.location.origin}/`
 }
 
-async function ensureTokenClient(): Promise<TokenClient> {
-  await loadGsi()
-  if (!tokenClient) {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-    if (!clientId) throw new Error('未配置 VITE_GOOGLE_CLIENT_ID')
-    tokenClient = window.google!.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: SCOPES,
-      callback: () => {},
-    })
-  }
-  return tokenClient
+function buildAuthUrl(state: string): string {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+  if (!clientId) throw new Error('未配置 VITE_GOOGLE_CLIENT_ID')
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: getRedirectUri(),
+    response_type: 'code',
+    scope: SCOPES,
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+    state,
+  })
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params}`
 }
 
 /**
- * Get a valid access token, requesting one from Google if needed.
- * Reuses a cached token from `localStorage` across page reloads while it's
- * still valid. `interactive=false` falls back to a silent (no-UI) refresh;
- * `interactive=true` shows the Google account/consent prompt.
+ * Start (or restart) the Google OAuth flow via a full-page redirect to
+ * Google's consent screen. Does not return — the page navigates away.
+ */
+export function connect(): void {
+  const state = crypto.randomUUID()
+  sessionStorage.setItem(OAUTH_STATE_KEY, state)
+  sessionStorage.setItem(OAUTH_RETURN_HASH_KEY, window.location.hash)
+  window.location.href = buildAuthUrl(state)
+}
+
+/**
+ * Process the `?code=...` / `?error=...` query params left by Google after
+ * `connect()` redirects back here: exchanges the code for tokens via
+ * `/api/google-token`, restores the pre-redirect hash route, and returns the
+ * connected user. Returns `null` if there was no redirect to handle.
+ */
+export async function handleOAuthRedirect(): Promise<DriveUser | null> {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  const error = params.get('error')
+  const returnedState = params.get('state')
+  if (!code && !error) return null
+
+  const expectedState = sessionStorage.getItem(OAUTH_STATE_KEY)
+  const returnHash = sessionStorage.getItem(OAUTH_RETURN_HASH_KEY) ?? ''
+  sessionStorage.removeItem(OAUTH_STATE_KEY)
+  sessionStorage.removeItem(OAUTH_RETURN_HASH_KEY)
+
+  // Clean ?code/?state/?error from the URL and restore the route the user was on.
+  // `replaceState` doesn't fire `hashchange`, so `HashRouter` won't notice the
+  // new hash on its own — dispatch one so it re-renders the restored route.
+  window.history.replaceState(null, '', window.location.pathname + returnHash)
+  window.dispatchEvent(new HashChangeEvent('hashchange'))
+
+  if (error) throw new Error(`Google 授权失败：${error}`)
+  if (returnedState !== expectedState) throw new Error('登录状态校验失败，请重试')
+
+  const res = await fetch('/api/google-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant: 'authorization_code',
+      code,
+      redirectUri: getRedirectUri(),
+      clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.error ?? `Google 登录失败 (${res.status})`)
+  }
+  const data: GoogleTokenResponse = await res.json()
+  accessToken = data.access_token
+  tokenExpiresAt = Date.now() + data.expires_in * 1000
+  refreshToken = data.refresh_token ?? null
+  storeToken(accessToken, tokenExpiresAt, refreshToken)
+  return getDriveUser(accessToken)
+}
+
+/**
+ * Get a valid access token, refreshing via `/api/google-token` if needed.
+ * `interactive=false` throws if there's no usable refresh token (used by
+ * background sync); `interactive=true` falls back to a full-page redirect to
+ * Google's consent screen via `connect()`.
  */
 async function requestToken(interactive: boolean): Promise<string> {
   if (accessToken && Date.now() < tokenExpiresAt - 60_000) return accessToken
 
   const stored = loadStoredToken()
-  if (stored && Date.now() < stored.expiresAt - 60_000) {
+  if (stored) {
     accessToken = stored.accessToken
     tokenExpiresAt = stored.expiresAt
-    return accessToken
+    refreshToken = stored.refreshToken ?? null
+    if (Date.now() < tokenExpiresAt - 60_000) return accessToken
   }
 
-  const client = await ensureTokenClient()
-
-  return new Promise<string>((resolve, reject) => {
-    let settled = false
-    const timer = setTimeout(
-      () => {
-        if (settled) return
-        settled = true
-        reject(new Error('需要重新连接 Google Drive'))
-      },
-      interactive ? 60_000 : 3_000,
-    )
-
-    client.callback = (resp) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      if (resp.error || !resp.access_token) {
-        reject(new Error(resp.error_description || resp.error || '授权失败'))
-        return
+  if (refreshToken) {
+    try {
+      const res = await fetch('/api/google-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant: 'refresh_token',
+          refreshToken,
+          clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        }),
+      })
+      if (res.ok) {
+        const data: GoogleTokenResponse = await res.json()
+        accessToken = data.access_token
+        tokenExpiresAt = Date.now() + data.expires_in * 1000
+        storeToken(accessToken, tokenExpiresAt, refreshToken)
+        return accessToken
       }
-      accessToken = resp.access_token
-      tokenExpiresAt = Date.now() + Number(resp.expires_in) * 1000
-      storeToken(accessToken, tokenExpiresAt)
-      resolve(accessToken)
+      // Refresh token rejected (expired/revoked) — stop retrying it.
+      refreshToken = null
+      clearStoredToken()
+    } catch {
+      // Network error — leave the refresh token in place for next time.
     }
-    client.requestAccessToken({ prompt: interactive ? 'consent' : '' })
-  })
+  }
+
+  if (interactive) {
+    connect()
+    throw new Error('正在跳转到 Google 登录…')
+  }
+  throw new Error('需要重新连接 Google Drive')
 }
 
+/** Best-effort revoke of whatever token we have, then clear local state. */
 export function disconnect(): void {
-  if (accessToken) {
-    window.google?.accounts.oauth2.revoke(accessToken, () => {})
+  const tokenToRevoke = refreshToken ?? accessToken
+  if (tokenToRevoke) {
+    void fetch('/api/google-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grant: 'revoke', token: tokenToRevoke }),
+    })
   }
   accessToken = null
+  refreshToken = null
   tokenExpiresAt = 0
   clearStoredToken()
 }
@@ -214,12 +265,6 @@ async function getDriveUser(token: string): Promise<DriveUser> {
   if (!res.ok) throw new Error(`获取账号信息失败 (${res.status})`)
   const data = await res.json()
   return { email: data.user?.emailAddress ?? '', name: data.user?.displayName ?? '' }
-}
-
-/** Connect (or reconnect) to Google Drive, prompting for consent if needed. */
-export async function connect(): Promise<DriveUser> {
-  const token = await requestToken(true)
-  return getDriveUser(token)
 }
 
 /** Get a valid access token for the Drive Picker, prompting for consent if needed. */
