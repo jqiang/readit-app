@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { CharacterStats, CharResult, ReadingSession } from '../types'
-import { applyAttempt, newCharacterStats } from '../lib/mastery'
+import type { CharacterStats, CharResult, Mastery, ReadingSession } from '../types'
+import { applyAttempt, newCharacterStats, setMastery } from '../lib/mastery'
 
 interface LibraryState {
   characters: Record<string, CharacterStats>
@@ -19,6 +19,8 @@ interface LibraryState {
   recordReview: (char: string, correct: boolean) => void
   /** Remove a character from the library entirely (e.g. it wasn't actually learned yet). */
   removeCharacter: (char: string) => void
+  /** Manually set a character's mastery level (status) from the library. */
+  setCharacterMastery: (char: string, mastery: Mastery) => void
   /** Manually register characters the child is already expected to know. Returns how many were newly added. */
   addKnownCharacters: (chars: string[]) => number
   resetAll: () => void
@@ -100,6 +102,16 @@ export const useLibraryStore = create<LibraryState>()(
         const characters = { ...get().characters }
         delete characters[char]
         set({ characters, lastModified: Date.now() })
+      },
+
+      setCharacterMastery: (char, mastery) => {
+        const existing = get().characters[char]
+        if (!existing) return
+        const now = Date.now()
+        set({
+          characters: { ...get().characters, [char]: setMastery(existing, mastery, now) },
+          lastModified: now,
+        })
       },
 
       addKnownCharacters: (chars) => {

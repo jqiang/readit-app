@@ -48,6 +48,29 @@ export function getMastery(stats: CharacterStats): Mastery {
   return 'mastered'
 }
 
+/** Representative Leitner box when a mastery level is set manually. */
+const MASTERY_BOX: Record<Mastery, number> = {
+  new: 1,
+  learning: 1,
+  familiar: 3,
+  mastered: 5,
+}
+
+/** Manually move a character to a mastery level, keeping review scheduling sane. */
+export function setMastery(
+  stats: CharacterStats,
+  mastery: Mastery,
+  now: number,
+): CharacterStats {
+  const box = MASTERY_BOX[mastery]
+  return {
+    ...stats,
+    box,
+    lastSeen: now,
+    nextReview: now + BOX_INTERVAL_DAYS[box] * DAY_MS,
+  }
+}
+
 export const MASTERY_LABELS: Record<Mastery, string> = {
   new: '未学过',
   learning: '学习中',

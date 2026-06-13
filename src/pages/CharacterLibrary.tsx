@@ -12,10 +12,19 @@ const FILTERS: Array<{ key: Mastery | 'all'; label: string }> = [
   { key: 'mastered', label: '已掌握' },
 ]
 
+/** Order clicking a status badge cycles through: red → orange → green → red. */
+const STATUS_CYCLE: Mastery[] = ['learning', 'familiar', 'mastered']
+
+function nextMastery(current: Mastery): Mastery {
+  const i = STATUS_CYCLE.indexOf(current)
+  return STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length] ?? 'learning'
+}
+
 export default function CharacterLibrary() {
   const characters = useLibraryStore((s) => s.characters)
   const addKnownCharacters = useLibraryStore((s) => s.addKnownCharacters)
   const removeCharacter = useLibraryStore((s) => s.removeCharacter)
+  const setCharacterMastery = useLibraryStore((s) => s.setCharacterMastery)
   const [filter, setFilter] = useState<Mastery | 'all'>('all')
   const [search, setSearch] = useState('')
   const [input, setInput] = useState('')
@@ -47,7 +56,15 @@ export default function CharacterLibrary() {
           stats.char.includes(q) ||
           charPinyin(stats.char).toLowerCase().includes(q),
       )
-      .sort((a, b) => b.stats.lastSeen - a.stats.lastSeen)
+      .sort((a, b) =>
+        // "all" uses a stable alphabetical (pinyin) order so toggling a
+        // character's status doesn't reshuffle the list; status-specific
+        // filters keep recency order (toggling moves the card out of view).
+        filter === 'all'
+          ? charPinyin(a.stats.char).localeCompare(charPinyin(b.stats.char)) ||
+            a.stats.char.localeCompare(b.stats.char)
+          : b.stats.lastSeen - a.stats.lastSeen,
+      )
   }, [characters, filter, search])
 
   function handleAdd() {
@@ -170,11 +187,14 @@ export default function CharacterLibrary() {
                     <div className="text-sm text-slate-400 mb-2">
                       {charPinyin(stats.char)}
                     </div>
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${MASTERY_COLORS[mastery]}`}
+                    <button
+                      onClick={() => setCharacterMastery(stats.char, nextMastery(mastery))}
+                      title="点击切换状态"
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition hover:opacity-80 ${MASTERY_COLORS[mastery]}`}
                     >
                       {MASTERY_LABELS[mastery]}
-                    </span>
+                      <span className="opacity-50">⇄</span>
+                    </button>
                     <div className="mt-2 text-xs text-slate-400">
                       正确 {stats.correctCount} · 错误 {stats.wrongCount}（{accuracy}%）
                     </div>

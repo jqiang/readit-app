@@ -112,6 +112,12 @@ export default function ReadingPractice() {
     () => (passageText ? Array.from(passageText) : []),
     [passageText],
   )
+  const titleChars = useMemo(() => (book ? Array.from(book.title) : []), [book])
+  // The full markable text = title + '\n' separator + body. Title chars occupy
+  // indices [0, titleChars.length); body chars start after the separator.
+  const bodyOffset = titleChars.length + 1
+  const fullText =
+    book && passageText !== null ? `${book.title}\n${passageText}` : null
 
   useEffect(() => {
     if (driveReady) void refresh()
@@ -123,8 +129,13 @@ export default function ReadingPractice() {
     getText(selectedBookId)
       .then((text) => {
         if (cancelled) return
+        const title =
+          useBookLibraryStore.getState().books.find((b) => b.id === selectedBookId)
+            ?.title ?? ''
         setPassageState({ id: selectedBookId, status: 'done', text })
-        setMarks(initMarks(text))
+        // The title is markable too, sharing one marks array with the body
+        // (separated by a non-Chinese '\n' that initMarks leaves as 'skip').
+        setMarks(initMarks(`${title}\n${text}`))
         setResult(null)
       })
       .catch((err) => {
@@ -140,20 +151,20 @@ export default function ReadingPractice() {
     }
   }, [selectedBookId, getText])
 
-  function handleCharClick(i: number) {
-    if (result || !passageText) return
-    const isKnown = !!characters[targetChars[i]]
+  function handleCharClick(absIndex: number, ch: string) {
+    if (result || passageText === null) return
+    const isKnown = !!characters[ch]
     setMarks((prev) => {
-      if (prev[i] === 'skip') return prev
+      if (prev[absIndex] === 'skip') return prev
       const next = [...prev]
-      next[i] = cycleMark(next[i], isKnown)
+      next[absIndex] = cycleMark(next[absIndex], isKnown)
       return next
     })
   }
 
   function finish() {
-    if (!book || !passageText) return
-    const results = getCharResults(marks, passageText, (ch) => !!characters[ch])
+    if (!book || fullText === null) return
+    const results = getCharResults(marks, fullText, (ch) => !!characters[ch])
     recordSession(book.id, book.title, results)
     setResult({
       correct: results.filter((r) => r.outcome === 'correct').length,
@@ -170,9 +181,32 @@ export default function ReadingPractice() {
   }
 
   function resetPassage() {
-    if (!passageText) return
-    setMarks(initMarks(passageText))
+    if (fullText === null) return
+    setMarks(initMarks(fullText))
     setResult(null)
+  }
+
+  function renderChar(ch: string, absIndex: number, key: string) {
+    const mark = marks[absIndex] ?? 'skip'
+    const inLibrary = !!characters[ch]
+    const showPinyin =
+      mark !== 'skip' && (inLibrary ? mark === 'remove' : mark !== 'learned')
+    return (
+      <ruby
+        key={key}
+        onClick={() => handleCharClick(absIndex, ch)}
+        className={`rounded px-0.5 transition-colors ${MARK_STYLES[mark]} ${
+          mark !== 'skip' && !result ? 'cursor-pointer' : ''
+        }`}
+      >
+        {ch}
+        {showPinyin && (
+          <rt className="text-xs font-normal text-violet-400 select-none">
+            {charPinyin(ch)}
+          </rt>
+        )}
+      </ruby>
+    )
   }
 
   return (
@@ -326,30 +360,14 @@ export default function ReadingPractice() {
                 </section>
 
                 <section className="bg-white rounded-2xl border border-slate-200 p-6">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4">{book.title}</h3>
+                  <h3
+                    className="text-2xl font-bold text-slate-800 mb-4 tracking-wide"
+                    style={{ lineHeight: 2.4 }}
+                  >
+                    {titleChars.map((ch, i) => renderChar(ch, i, `t-${i}`))}
+                  </h3>
                   <div className="text-3xl tracking-wide" style={{ lineHeight: 3 }}>
-                    {targetChars.map((ch, i) => {
-                      const mark = marks[i]
-                      const inLibrary = !!characters[ch]
-                      const showPinyin =
-                        mark !== 'skip' && (inLibrary ? mark === 'remove' : mark !== 'learned')
-                      return (
-                        <ruby
-                          key={i}
-                          onClick={() => handleCharClick(i)}
-                          className={`rounded px-0.5 transition-colors ${MARK_STYLES[mark]} ${
-                            mark !== 'skip' && !result ? 'cursor-pointer' : ''
-                          }`}
-                        >
-                          {ch}
-                          {showPinyin && (
-                            <rt className="text-xs font-normal text-violet-400 select-none">
-                              {charPinyin(ch)}
-                            </rt>
-                          )}
-                        </ruby>
-                      )
-                    })}
+                    {targetChars.map((ch, i) => renderChar(ch, bodyOffset + i, `b-${i}`))}
                   </div>
                 </section>
 
