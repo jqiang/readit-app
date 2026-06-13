@@ -42,6 +42,11 @@ export function applyAttempt(
   }
 }
 
+/** Whether a character is in the active library (not moved out by the user). */
+export function isActive(stats: CharacterStats): boolean {
+  return !stats.removed
+}
+
 export function getMastery(stats: CharacterStats): Mastery {
   if (stats.box <= 2) return 'learning'
   if (stats.box <= 4) return 'familiar'

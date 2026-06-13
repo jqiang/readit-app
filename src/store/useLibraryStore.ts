@@ -17,7 +17,9 @@ interface LibraryState {
   ) => void
   /** Record the outcome of a single flashcard review. */
   recordReview: (char: string, correct: boolean) => void
-  /** Remove a character from the library entirely (e.g. it wasn't actually learned yet). */
+  /** Move a character out of the active library (e.g. it wasn't actually
+   * learned yet). The character is kept with a `removed` flag — never deleted —
+   * so cloud sync can't lose it; it's just hidden from the UI and review. */
   removeCharacter: (char: string) => void
   /** Manually set a character's mastery level (status) from the library. */
   setCharacterMastery: (char: string, mastery: Mastery) => void
@@ -46,8 +48,11 @@ export const useLibraryStore = create<LibraryState>()(
         for (const { char, outcome } of results) {
           if (outcome === 'learn') {
             learnedChars.push(char)
-            if (!characters[char]) {
-              characters[char] = newCharacterStats(char, now)
+            // Reviving a previously moved-out char keeps its history.
+            characters[char] = {
+              ...(characters[char] ?? newCharacterStats(char, now)),
+              removed: false,
+              lastSeen: now,
             }
             continue
           }
@@ -55,18 +60,20 @@ export const useLibraryStore = create<LibraryState>()(
             learnedChars.push(char)
             wrongChars.push(char)
             const existing = characters[char] ?? newCharacterStats(char, now)
-            characters[char] = applyAttempt(existing, false, now)
+            characters[char] = { ...applyAttempt(existing, false, now), removed: false }
             continue
           }
           if (outcome === 'remove') {
             removedChars.push(char)
-            delete characters[char]
+            const existing = characters[char] ?? newCharacterStats(char, now)
+            // Hide it, but keep the record so sync never loses it.
+            characters[char] = { ...existing, removed: true, lastSeen: now }
             continue
           }
           totalChars++
           const correct = outcome === 'correct'
           const existing = characters[char] ?? newCharacterStats(char, now)
-          characters[char] = applyAttempt(existing, correct, now)
+          characters[char] = { ...applyAttempt(existing, correct, now), removed: false }
           if (correct) correctChars++
           else wrongChars.push(char)
         }
@@ -99,9 +106,15 @@ export const useLibraryStore = create<LibraryState>()(
       },
 
       removeCharacter: (char) => {
-        const characters = { ...get().characters }
-        delete characters[char]
-        set({ characters, lastModified: Date.now() })
+        const now = Date.now()
+        const existing = get().characters[char]
+        if (!existing) return
+        // Hide it but keep the record (bump lastSeen so the move-out wins in the
+        // cloud merge) — never delete, so sync can't lose data.
+        set({
+          characters: { ...get().characters, [char]: { ...existing, removed: true, lastSeen: now } },
+          lastModified: now,
+        })
       },
 
       setCharacterMastery: (char, mastery) => {
@@ -119,8 +132,12 @@ export const useLibraryStore = create<LibraryState>()(
         const characters = { ...get().characters }
         let added = 0
         for (const char of chars) {
-          if (characters[char]) continue
-          characters[char] = newCharacterStats(char, now)
+          const existing = characters[char]
+          if (existing && !existing.removed) continue
+          // Either brand new, or reviving one the user had moved out.
+          characters[char] = existing
+            ? { ...existing, removed: false, lastSeen: now }
+            : newCharacterStats(char, now)
           added++
         }
         if (added > 0) set({ characters, lastModified: now })

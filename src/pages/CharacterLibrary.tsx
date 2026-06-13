@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLibraryStore } from '../store/useLibraryStore'
-import { getMastery, MASTERY_COLORS, MASTERY_LABELS } from '../lib/mastery'
+import { getMastery, isActive, MASTERY_COLORS, MASTERY_LABELS } from '../lib/mastery'
 import { charPinyin, isChineseChar } from '../lib/pinyin'
 import type { Mastery } from '../types'
 
@@ -30,7 +30,13 @@ export default function CharacterLibrary() {
   const [input, setInput] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
 
-  const total = Object.keys(characters).length
+  // Characters the user moved out of the library are kept (for safe sync) but
+  // hidden everywhere in the UI.
+  const activeChars = useMemo(
+    () => Object.values(characters).filter(isActive),
+    [characters],
+  )
+  const total = activeChars.length
 
   const counts = useMemo(() => {
     const c: Record<Mastery, number> = {
@@ -39,15 +45,15 @@ export default function CharacterLibrary() {
       familiar: 0,
       mastered: 0,
     }
-    Object.values(characters).forEach((stats) => {
+    activeChars.forEach((stats) => {
       c[getMastery(stats)]++
     })
     return c
-  }, [characters])
+  }, [activeChars])
 
   const entries = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return Object.values(characters)
+    return activeChars
       .map((stats) => ({ stats, mastery: getMastery(stats) }))
       .filter(({ mastery }) => filter === 'all' || mastery === filter)
       .filter(
@@ -65,7 +71,7 @@ export default function CharacterLibrary() {
             a.stats.char.localeCompare(b.stats.char)
           : b.stats.lastSeen - a.stats.lastSeen,
       )
-  }, [characters, filter, search])
+  }, [activeChars, filter, search])
 
   function handleAdd() {
     const chars = Array.from(new Set(Array.from(input).filter(isChineseChar)))

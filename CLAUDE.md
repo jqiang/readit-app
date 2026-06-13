@@ -15,14 +15,16 @@ npm install
 npm run dev       # Vite dev server at http://localhost:5173 (UI only, see below)
 npm run build     # tsc -b && vite build
 npm run lint      # eslint .
+npm test          # vitest run (Vitest, node env)
 npx tsc -b        # type-check only (run after every change)
 npx vercel dev    # Vite + api/ Edge Functions together — required for Google Drive
                    # connect/sync and /import (one-time: npm install -g vercel &&
                    # vercel login && vercel link)
 ```
 
-There is no test suite. `npx tsc -b` is the verification bar after each change; also run
-`npx eslint <changed files>` for touched files.
+`npx tsc -b` is the verification bar after each change; also run `npx eslint <changed files>` for
+touched files. The only tests so far are `src/lib/librarySync.test.ts` (Vitest), covering the
+additive cloud-merge data-safety invariants — run with `npm test`.
 
 ## Stack
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLibraryStore } from '../store/useLibraryStore'
+import { isActive } from '../lib/mastery'
 import { charPinyin } from '../lib/pinyin'
 
 const QUEUE_SIZE = 10
@@ -23,14 +24,21 @@ export default function ReviewMode() {
   const [revealed, setRevealed] = useState(false)
   const [tally, setTally] = useState({ correct: 0, wrong: 0, removed: 0 })
 
+  // Characters moved out of the library are kept for safe sync but excluded
+  // from review.
+  const activeChars = useMemo(
+    () => Object.values(characters).filter(isActive),
+    [characters],
+  )
+
   const dueCount = useMemo(() => {
     const now = Date.now()
-    return Object.values(characters).filter((c) => c.nextReview <= now).length
-  }, [characters])
+    return activeChars.filter((c) => c.nextReview <= now).length
+  }, [activeChars])
 
   function startReview() {
     const now = Date.now()
-    const all = Object.values(characters)
+    const all = activeChars
     const due = all.filter((c) => c.nextReview <= now)
     const pool = due.length > 0 ? due : all
     const sorted = [...pool].sort(
@@ -60,7 +68,7 @@ export default function ReviewMode() {
     setIndex((i) => i + 1)
   }
 
-  if (Object.keys(characters).length === 0) {
+  if (activeChars.length === 0) {
     return (
       <div className="text-center py-20">
         <div className="text-5xl mb-4">🎯</div>

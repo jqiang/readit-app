@@ -1,7 +1,25 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useLibraryStore } from './useLibraryStore'
+import { mergeLibraries, type LibraryBackup } from '../lib/librarySync'
 import * as drive from '../lib/googleDrive'
+
+/** Snapshot the local library as a backup payload. */
+function localBackup(): LibraryBackup {
+  const { characters, sessions, lastModified } = useLibraryStore.getState()
+  return { characters, sessions, lastModified }
+}
+
+/** Converge local state onto a merged backup, re-merging with whatever the
+ * local store holds now so edits made during the network round-trip survive. */
+function applyMerged(merged: LibraryBackup): void {
+  const final = mergeLibraries(merged, localBackup())
+  useLibraryStore.setState({
+    characters: final.characters,
+    sessions: final.sessions,
+    lastModified: final.lastModified,
+  })
+}
 
 type SyncStatus = 'idle' | 'connecting' | 'syncing' | 'error'
 
@@ -39,69 +57,48 @@ export const useDriveStore = create<DriveState>()(
         set({ connected: false, email: null, name: null, status: 'idle', error: null })
       },
 
+      // Additive sync to the cloud: merges local into the remote backup and
+      // uploads the union, then converges local onto the merged result. Never
+      // drops characters in either direction — only tombstoned removals delete.
       pushToCloud: async () => {
         set({ status: 'syncing', error: null })
         try {
-          const { characters, sessions, lastModified } = useLibraryStore.getState()
-          const result = await drive.pushLibrary({ characters, sessions, lastModified })
-          if (result.status === 'skipped-stale') {
-            set({
-              status: 'error',
-              error: `云端备份比本地数据更新（云端：${new Date(result.remoteLastModified).toLocaleString('zh-CN')}），已跳过推送。请先从云端恢复，避免覆盖较新的数据。`,
-            })
-            return
-          }
+          const merged = await drive.pushLibrary(localBackup())
+          applyMerged(merged)
           set({ status: 'idle', lastSyncedAt: Date.now() })
         } catch (e) {
           set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
         }
       },
 
+      // Additive restore from the cloud: merges the remote backup into local
+      // (adding cloud characters, applying tombstones) without dropping local
+      // characters the cloud hasn't seen.
       pullFromCloud: async () => {
         set({ status: 'syncing', error: null })
         try {
-          const data = await drive.pullLibrary()
-          if (!data) {
+          const remote = await drive.pullLibrary()
+          if (!remote) {
             set({ status: 'error', error: '云端还没有备份数据' })
             return
           }
-          const localLastModified = useLibraryStore.getState().lastModified
-          if (localLastModified > (data.lastModified ?? 0)) {
-            set({
-              status: 'error',
-              error: `本地数据比云端备份更新（本地：${new Date(localLastModified).toLocaleString('zh-CN')}），已取消恢复，避免覆盖较新的本地数据。如需强制恢复旧版本，请先推送本地数据或重置本地数据。`,
-            })
-            return
-          }
-          useLibraryStore.setState({
-            characters: data.characters ?? {},
-            sessions: data.sessions ?? [],
-            lastModified: data.lastModified ?? Date.now(),
-          })
+          applyMerged(remote)
           set({ status: 'idle', lastSyncedAt: Date.now() })
         } catch (e) {
           set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
         }
       },
 
-      // Periodic background sync: pull in any newer data from another device
-      // first, then push the (possibly merged) local state back to the cloud.
+      // Background / on-connect sync — explicitly pull first, then push, so
+      // local picks up remote data even if the upload later fails. Both steps
+      // are additive merges, so nothing is ever dropped in either direction.
       syncWithCloud: async () => {
         set({ status: 'syncing', error: null })
         try {
           const remote = await drive.pullLibrary()
-          if (remote) {
-            const localLastModified = useLibraryStore.getState().lastModified
-            if ((remote.lastModified ?? 0) > localLastModified) {
-              useLibraryStore.setState({
-                characters: remote.characters ?? {},
-                sessions: remote.sessions ?? [],
-                lastModified: remote.lastModified ?? Date.now(),
-              })
-            }
-          }
-          const { characters, sessions, lastModified } = useLibraryStore.getState()
-          await drive.pushLibrary({ characters, sessions, lastModified })
+          if (remote) applyMerged(remote)
+          const merged = await drive.pushLibrary(localBackup())
+          applyMerged(merged)
           set({ status: 'idle', lastSyncedAt: Date.now() })
         } catch (e) {
           set({ status: 'error', error: e instanceof Error ? e.message : String(e) })

@@ -85,13 +85,7 @@ export default function Settings() {
                 推送到云端
               </button>
               <button
-                onClick={() => {
-                  if (
-                    confirm('从云端恢复将覆盖本地的生字本和练习记录，确定吗？')
-                  ) {
-                    drive.pullFromCloud()
-                  }
-                }}
+                onClick={drive.pullFromCloud}
                 disabled={drive.status === 'syncing'}
                 className="px-4 py-2 rounded-lg font-medium bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 transition disabled:opacity-50"
               >

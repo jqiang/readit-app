@@ -8,6 +8,10 @@ export interface CharacterStats {
   box: number
   lastSeen: number
   nextReview: number
+  /** True when the user marked this character as "not yet learned" / moved it
+   * out of the active library. The character is kept (never deleted) so cloud
+   * sync can never lose data — it's just hidden from the UI and review. */
+  removed?: boolean
 }
 
 export type CharOutcome = 'correct' | 'wrong' | 'learn' | 'learnWrong' | 'remove'

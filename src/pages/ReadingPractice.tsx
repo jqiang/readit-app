@@ -151,9 +151,16 @@ export default function ReadingPractice() {
     }
   }, [selectedBookId, getText])
 
+  // A char moved out of the library is treated as not-in-library: it shows
+  // pinyin and re-enters the library if marked as learned.
+  function isInLibrary(ch: string) {
+    const c = characters[ch]
+    return !!c && !c.removed
+  }
+
   function handleCharClick(absIndex: number, ch: string) {
     if (result || passageText === null) return
-    const isKnown = !!characters[ch]
+    const isKnown = isInLibrary(ch)
     setMarks((prev) => {
       if (prev[absIndex] === 'skip') return prev
       const next = [...prev]
@@ -164,7 +171,7 @@ export default function ReadingPractice() {
 
   function finish() {
     if (!book || fullText === null) return
-    const results = getCharResults(marks, fullText, (ch) => !!characters[ch])
+    const results = getCharResults(marks, fullText, isInLibrary)
     recordSession(book.id, book.title, results)
     setResult({
       correct: results.filter((r) => r.outcome === 'correct').length,
@@ -188,7 +195,7 @@ export default function ReadingPractice() {
 
   function renderChar(ch: string, absIndex: number, key: string) {
     const mark = marks[absIndex] ?? 'skip'
-    const inLibrary = !!characters[ch]
+    const inLibrary = isInLibrary(ch)
     const showPinyin =
       mark !== 'skip' && (inLibrary ? mark === 'remove' : mark !== 'learned')
     return (

@@ -1,4 +1,6 @@
-import type { CharacterStats, ReadingSession } from '../types'
+import { mergeLibraries, type LibraryBackup } from './librarySync'
+
+export type { LibraryBackup } from './librarySync'
 
 const SCOPES =
   'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly'
@@ -44,18 +46,6 @@ declare global {
     }
   }
 }
-
-export interface LibraryBackup {
-  characters: Record<string, CharacterStats>
-  sessions: ReadingSession[]
-  /** Epoch ms when this data was last modified locally; used to detect stale pushes/pulls. */
-  lastModified: number
-}
-
-export type PushResult =
-  | { status: 'pushed' }
-  /** Remote backup is newer than the local data being pushed — upload was skipped to avoid data loss. */
-  | { status: 'skipped-stale'; remoteLastModified: number }
 
 export interface DriveUser {
   email: string
@@ -364,23 +354,21 @@ async function downloadBackupContent(token: string, fileId: string): Promise<Lib
 }
 
 /**
- * Push the local library (characters + sessions) to the hidden Drive app-data
- * folder. If a backup already exists and its `lastModified` is newer than
- * `data.lastModified`, the push is skipped — this prevents stale or empty
- * local state (e.g. a cleared localStorage) from clobbering newer data
- * synced from another device.
+ * Additively sync the local library to the hidden Drive app-data folder:
+ * downloads the existing backup, merges it with `data` (union of characters +
+ * sessions, with tombstones for explicit removals), and uploads the merged
+ * result. A push can never silently drop characters from the cloud — only an
+ * explicit tombstone removes one. Returns the merged backup so the caller can
+ * converge local state to it.
  */
-export async function pushLibrary(data: LibraryBackup): Promise<PushResult> {
+export async function pushLibrary(data: LibraryBackup): Promise<LibraryBackup> {
   const token = await requestToken(false)
   const existing = await findBackupFile(token)
-  if (existing) {
-    const remote = await downloadBackupContent(token, existing.id)
-    if ((remote.lastModified ?? 0) > data.lastModified) {
-      return { status: 'skipped-stale', remoteLastModified: remote.lastModified }
-    }
-  }
-  await uploadBackupFile(token, JSON.stringify(data), existing?.id ?? null)
-  return { status: 'pushed' }
+  const merged = existing
+    ? mergeLibraries(await downloadBackupContent(token, existing.id), data)
+    : data
+  await uploadBackupFile(token, JSON.stringify(merged), existing?.id ?? null)
+  return merged
 }
 
 /** Pull the library backup from Drive, or null if no backup exists yet. */

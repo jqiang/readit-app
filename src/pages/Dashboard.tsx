@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useLibraryStore } from '../store/useLibraryStore'
-import { getMastery, MASTERY_LABELS } from '../lib/mastery'
+import { getMastery, isActive, MASTERY_LABELS } from '../lib/mastery'
 import type { Mastery } from '../types'
 
 export default function Dashboard() {
@@ -9,7 +9,7 @@ export default function Dashboard() {
   const seedDemoData = useLibraryStore((s) => s.seedDemoData)
   const resetAll = useLibraryStore((s) => s.resetAll)
 
-  const charList = Object.values(characters)
+  const charList = Object.values(characters).filter(isActive)
   const total = charList.length
   const now = Date.now()
   const dueCount = charList.filter((c) => c.nextReview <= now).length
