@@ -45,6 +45,7 @@ type PassageLoadState =
 export default function ReadingPractice() {
   const recordSession = useLibraryStore((s) => s.recordSession)
   const characters = useLibraryStore((s) => s.characters)
+  const sessions = useLibraryStore((s) => s.sessions)
   const driveConnected = useDriveStore((s) => s.connected)
   const driveReady = isDriveConfigured() && driveConnected
 
@@ -53,6 +54,9 @@ export default function ReadingPractice() {
   const error = useBookLibraryStore((s) => s.error)
   const refresh = useBookLibraryStore((s) => s.refresh)
   const getText = useBookLibraryStore((s) => s.getText)
+  const archiveBook = useBookLibraryStore((s) => s.archiveBook)
+
+  const [archiving, setArchiving] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'title' | 'updated'>('title')
@@ -99,6 +103,10 @@ export default function ReadingPractice() {
   const selectedBookId =
     bookId && books.some((b) => b.id === bookId) ? bookId : (sortedBooks[0]?.id ?? null)
   const book = books.find((b) => b.id === selectedBookId)
+  const bookSessions = useMemo(
+    () => sessions.filter((s) => s.passageId === selectedBookId),
+    [sessions, selectedBookId],
+  )
   const textLoading = selectedBookId !== null && passageState?.id !== selectedBookId
   const passageText =
     passageState?.id === selectedBookId && passageState.status === 'done'
@@ -286,20 +294,44 @@ export default function ReadingPractice() {
                 </div>
                 <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
                   {pageBooks.map((b) => (
-                    <button
+                    <div
                       key={b.id}
-                      onClick={() => setBookId(b.id)}
-                      className={`w-full text-left px-3 py-2 text-sm transition ${
+                      className={`flex items-center text-sm transition ${
                         b.id === selectedBookId
-                          ? 'bg-indigo-50 text-indigo-700 font-medium'
-                          : 'text-slate-600 hover:bg-slate-50'
+                          ? 'bg-indigo-50'
+                          : 'hover:bg-slate-50'
                       }`}
                     >
-                      <div className="truncate">{b.title}</div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {formatDate(b.modifiedTime)}
-                      </div>
-                    </button>
+                      <button
+                        onClick={() => setBookId(b.id)}
+                        className={`flex-1 text-left px-3 py-2 min-w-0 ${
+                          b.id === selectedBookId
+                            ? 'text-indigo-700 font-medium'
+                            : 'text-slate-600'
+                        }`}
+                      >
+                        <div className="truncate">{b.title}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {formatDate(b.modifiedTime)}
+                        </div>
+                      </button>
+                      <button
+                        title="归档"
+                        disabled={archiving === b.id}
+                        onClick={async () => {
+                          if (!confirm(`将「${b.title}」移到归档文件夹？`)) return
+                          setArchiving(b.id)
+                          try {
+                            await archiveBook(b.id)
+                          } finally {
+                            setArchiving(null)
+                          }
+                        }}
+                        className="px-2 py-2 text-slate-300 hover:text-slate-500 transition disabled:opacity-40 flex-shrink-0"
+                      >
+                        {archiving === b.id ? '…' : '📦'}
+                      </button>
+                    </div>
                   ))}
                   {pageBooks.length === 0 && (
                     <div className="px-3 py-2 text-sm text-slate-400">没有匹配的课文</div>
@@ -337,6 +369,75 @@ export default function ReadingPractice() {
               <div className="bg-rose-50 border border-rose-100 text-rose-600 text-sm rounded-xl p-3">
                 {textError}
               </div>
+            )}
+
+            {book && bookSessions.length > 0 && (
+              <section className="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 className="text-sm font-semibold text-slate-500 mb-3">
+                  历史记录（共 {bookSessions.length} 次）
+                </h3>
+                <ul className="divide-y divide-slate-100">
+                  {bookSessions.map((s) => {
+                    const accuracy =
+                      s.totalChars > 0
+                        ? Math.round((s.correctChars / s.totalChars) * 100)
+                        : 100
+                    return (
+                      <li key={s.id} className="py-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-400">
+                            {new Date(s.date).toLocaleDateString('zh-CN', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                            })}
+                          </span>
+                          <span
+                            className={`font-semibold ${
+                              accuracy >= 90
+                                ? 'text-emerald-600'
+                                : accuracy >= 70
+                                  ? 'text-amber-600'
+                                  : 'text-rose-600'
+                            }`}
+                          >
+                            {accuracy}%
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          读对 {s.correctChars}/{s.totalChars} 字
+                          {s.wrongChars.length > 0 && `，读错 ${s.wrongChars.length} 字`}
+                          {s.learnedChars.length > 0 && `，新学会 ${s.learnedChars.length} 字`}
+                        </div>
+                        {s.wrongChars.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {s.wrongChars.map((ch) => (
+                              <span
+                                key={ch}
+                                className="px-1.5 py-0.5 rounded bg-rose-50 border border-rose-100 text-rose-500 text-xs"
+                              >
+                                {ch}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {s.learnedChars.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {s.learnedChars.map((ch) => (
+                              <span
+                                key={ch}
+                                className="px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 text-xs"
+                              >
+                                {ch}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
             )}
 
             {book && passageText !== null && (

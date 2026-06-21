@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { downloadPassageText, listPassageFiles } from '../lib/googleDrive'
+import { archivePassageFile, downloadPassageText, listPassageFiles } from '../lib/googleDrive'
 
 export interface BookSummary {
   id: string
@@ -24,6 +24,8 @@ interface BookLibraryState {
   refresh: () => Promise<void>
   /** Get a book's text, downloading and caching it on first access. */
   getText: (id: string) => Promise<string>
+  /** Move a book to the "Archived" subfolder in Drive and remove it from the local list. */
+  archiveBook: (id: string) => Promise<void>
 }
 
 export const useBookLibraryStore = create<BookLibraryState>()(
@@ -53,6 +55,14 @@ export const useBookLibraryStore = create<BookLibraryState>()(
         } catch (err) {
           set({ status: 'error', error: err instanceof Error ? err.message : String(err) })
         }
+      },
+
+      archiveBook: async (id) => {
+        await archivePassageFile(id)
+        const { books, cache } = get()
+        const newCache = { ...cache }
+        delete newCache[id]
+        set({ books: books.filter((b) => b.id !== id), cache: newCache })
       },
 
       getText: async (id) => {

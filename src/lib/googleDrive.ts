@@ -465,6 +465,61 @@ export interface DrivePassageFile {
   mimeType: string
 }
 
+const ARCHIVE_FOLDER_NAME = 'Archived'
+
+async function findSubfolder(
+  token: string,
+  parentId: string,
+  name: string,
+): Promise<string | null> {
+  const params = new URLSearchParams({
+    q: `mimeType='application/vnd.google-apps.folder' and name='${name}' and '${parentId}' in parents and trashed=false`,
+    fields: 'files(id)',
+    spaces: 'drive',
+  })
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`查找子文件夹失败 (${res.status})`)
+  const data = await res.json()
+  return data.files?.[0]?.id ?? null
+}
+
+async function createSubfolder(
+  token: string,
+  parentId: string,
+  name: string,
+): Promise<string> {
+  const res = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
+  })
+  if (!res.ok) throw new Error(`创建子文件夹失败 (${res.status})`)
+  const data = await res.json()
+  return data.id
+}
+
+/**
+ * Move a passage file into the "Archived" subfolder inside "ReadIt 课文".
+ * Creates the subfolder on first use. The file disappears from listPassageFiles()
+ * because that only queries direct children of the parent folder.
+ */
+export async function archivePassageFile(fileId: string): Promise<void> {
+  const token = await requestToken(false)
+  const parentId = await findPassageFolder(token)
+  if (!parentId) throw new Error('找不到「ReadIt 课文」文件夹')
+  const archiveId =
+    (await findSubfolder(token, parentId, ARCHIVE_FOLDER_NAME)) ??
+    (await createSubfolder(token, parentId, ARCHIVE_FOLDER_NAME))
+  const params = new URLSearchParams({ addParents: archiveId, removeParents: parentId, fields: 'id' })
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?${params}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`移动课文失败 (${res.status})`)
+}
+
 /**
  * List the `.txt` files in the "ReadIt 课文" Drive folder, including ones
  * added manually (not just files this app uploaded). Returns an empty list
