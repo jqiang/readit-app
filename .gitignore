@@ -13,9 +13,12 @@ dist-ssr
 .vite
 *.local
 .env.server
+scripts/.env
+scripts/token.json
+scripts/credentials.json
 
 # Claude Code runtime artifacts
-.claude/scheduled_tasks.lock
+.claude/*
 
 # Editor directories and files
 .vscode/*
