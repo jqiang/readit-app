@@ -18,8 +18,8 @@ const MARK_STYLES: Record<CharMark, string> = {
 const PAGE_SIZE = 10
 
 const SORT_OPTIONS: Array<{ key: 'title' | 'updated'; label: string }> = [
-  { key: 'title', label: '按标题' },
   { key: 'updated', label: '按更新时间' },
+  { key: 'title', label: '按标题' },
 ]
 
 function formatDate(iso: string): string {
@@ -59,9 +59,9 @@ export default function ReadingPractice() {
   const [archiving, setArchiving] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState<'title' | 'updated'>('title')
+  const [sortBy, setSortBy] = useState<'title' | 'updated'>('updated')
   const [page, setPage] = useState(1)
-  const [pageResetKey, setPageResetKey] = useState({ search: '', sortBy: 'title' as typeof sortBy })
+  const [pageResetKey, setPageResetKey] = useState({ search: '', sortBy: 'updated' as typeof sortBy })
   const [bookId, setBookId] = useState<string | null>(null)
   const [passageState, setPassageState] = useState<PassageLoadState | null>(null)
 
