@@ -30,6 +30,12 @@ interface DriveState {
   lastSyncedAt: number | null
   status: SyncStatus
   error: string | null
+  /** True once a sync/API call has determined the stored token can't be
+   * refreshed and interactive re-consent is required — i.e. `connected` is
+   * stale and nothing will actually sync until the user reconnects. Surfaced
+   * globally (header banner) since it can happen on any page, not just
+   * Settings. Cleared by a successful connect or a successful sync. */
+  needsReconnect: boolean
   connect: () => void
   disconnect: () => void
   pushToCloud: () => Promise<void>
@@ -39,13 +45,14 @@ interface DriveState {
 
 export const useDriveStore = create<DriveState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       connected: false,
       email: null,
       name: null,
       lastSyncedAt: null,
       status: 'idle',
       error: null,
+      needsReconnect: false,
 
       connect: () => {
         set({ status: 'connecting', error: null })
@@ -54,20 +61,32 @@ export const useDriveStore = create<DriveState>()(
 
       disconnect: () => {
         drive.disconnect()
-        set({ connected: false, email: null, name: null, status: 'idle', error: null })
+        set({
+          connected: false,
+          email: null,
+          name: null,
+          status: 'idle',
+          error: null,
+          needsReconnect: false,
+        })
       },
 
       // Additive sync to the cloud: merges local into the remote backup and
       // uploads the union, then converges local onto the merged result. Never
       // drops characters in either direction — only tombstoned removals delete.
       pushToCloud: async () => {
+        if (get().status === 'syncing') return
         set({ status: 'syncing', error: null })
         try {
           const merged = await drive.pushLibrary(localBackup())
           applyMerged(merged)
-          set({ status: 'idle', lastSyncedAt: Date.now() })
+          set({ status: 'idle', lastSyncedAt: Date.now(), needsReconnect: false })
         } catch (e) {
-          set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+          set({
+            status: 'error',
+            error: e instanceof Error ? e.message : String(e),
+            needsReconnect: e instanceof drive.ReauthRequiredError ? true : get().needsReconnect,
+          })
         }
       },
 
@@ -75,6 +94,7 @@ export const useDriveStore = create<DriveState>()(
       // (adding cloud characters, applying tombstones) without dropping local
       // characters the cloud hasn't seen.
       pullFromCloud: async () => {
+        if (get().status === 'syncing') return
         set({ status: 'syncing', error: null })
         try {
           const remote = await drive.pullLibrary()
@@ -83,25 +103,36 @@ export const useDriveStore = create<DriveState>()(
             return
           }
           applyMerged(remote)
-          set({ status: 'idle', lastSyncedAt: Date.now() })
+          set({ status: 'idle', lastSyncedAt: Date.now(), needsReconnect: false })
         } catch (e) {
-          set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+          set({
+            status: 'error',
+            error: e instanceof Error ? e.message : String(e),
+            needsReconnect: e instanceof drive.ReauthRequiredError ? true : get().needsReconnect,
+          })
         }
       },
 
       // Background / on-connect sync — explicitly pull first, then push, so
       // local picks up remote data even if the upload later fails. Both steps
       // are additive merges, so nothing is ever dropped in either direction.
+      // Called immediately whenever a connection is (re-)established — see
+      // useGoogleOAuthRedirect — as well as periodically while connected.
       syncWithCloud: async () => {
+        if (get().status === 'syncing') return
         set({ status: 'syncing', error: null })
         try {
           const remote = await drive.pullLibrary()
           if (remote) applyMerged(remote)
           const merged = await drive.pushLibrary(localBackup())
           applyMerged(merged)
-          set({ status: 'idle', lastSyncedAt: Date.now() })
+          set({ status: 'idle', lastSyncedAt: Date.now(), needsReconnect: false })
         } catch (e) {
-          set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+          set({
+            status: 'error',
+            error: e instanceof Error ? e.message : String(e),
+            needsReconnect: e instanceof drive.ReauthRequiredError ? true : get().needsReconnect,
+          })
         }
       },
     }),
@@ -112,6 +143,7 @@ export const useDriveStore = create<DriveState>()(
         email: state.email,
         name: state.name,
         lastSyncedAt: state.lastSyncedAt,
+        needsReconnect: state.needsReconnect,
       }),
     },
   ),
