@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import ReadingPractice from './pages/ReadingPractice'
 import CharacterLibrary from './pages/CharacterLibrary'
 import ReviewMode from './pages/ReviewMode'
+import PinyinPractice from './pages/PinyinPractice'
 import Settings from './pages/Settings'
 import ImportPassage from './pages/ImportPassage'
 import { useLibraryBackup } from './hooks/useLibraryBackup'
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/read" element={<ReadingPractice />} />
           <Route path="/library" element={<CharacterLibrary />} />
           <Route path="/review" element={<ReviewMode />} />
+          <Route path="/pinyin" element={<PinyinPractice />} />
           <Route path="/import" element={<ImportPassage />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
