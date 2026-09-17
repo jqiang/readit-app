@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mergeLibraries, type LibraryBackup } from './librarySync'
-import type { CharacterStats, ReadingSession } from '../types'
+import { coinBalance, readingEntryId } from './coins'
+import type { CharacterStats, CoinEntry, ReadingSession } from '../types'
 
 function char(c: string, over: Partial<CharacterStats> = {}): CharacterStats {
   return {
@@ -32,8 +33,12 @@ function session(id: string, date: number): ReadingSession {
   }
 }
 
+function coin(id: string, amount: number, date: number, over: Partial<CoinEntry> = {}): CoinEntry {
+  return { id, amount, reason: 'adjust', date, day: '2026-01-01', ...over }
+}
+
 function backup(over: Partial<LibraryBackup> = {}): LibraryBackup {
-  return { characters: {}, sessions: [], lastModified: 0, ...over }
+  return { characters: {}, sessions: [], coins: [], lastModified: 0, ...over }
 }
 
 describe('mergeLibraries — never loses characters', () => {
@@ -179,17 +184,22 @@ describe('mergeLibraries — sessions and metadata', () => {
 })
 
 describe('mergeLibraries — robustness', () => {
-  it('tolerates missing characters/sessions fields (legacy backups)', () => {
+  it('tolerates missing characters/sessions/coins fields (legacy backups)', () => {
     const legacy = { lastModified: 1 } as unknown as LibraryBackup
     const merged = mergeLibraries(legacy, backup({ characters: charsOf(char('我')) }))
 
     expect(Object.keys(merged.characters)).toEqual(['我'])
     expect(merged.sessions).toEqual([])
+    expect(merged.coins).toEqual([])
   })
 
   it('does not mutate its inputs', () => {
-    const a = backup({ characters: charsOf(char('我')), sessions: [session('s1', 1)] })
-    const b = backup({ characters: charsOf(char('你')) })
+    const a = backup({
+      characters: charsOf(char('我')),
+      sessions: [session('s1', 1)],
+      coins: [coin('c1', 10, 100)],
+    })
+    const b = backup({ characters: charsOf(char('你')), coins: [coin('c2', 5, 200)] })
     const aSnapshot = structuredClone(a)
     const bSnapshot = structuredClone(b)
 
@@ -203,8 +213,9 @@ describe('mergeLibraries — robustness', () => {
     const a = backup({
       characters: charsOf(char('我', { lastSeen: 2000 }), char('错', { removed: true, lastSeen: 3000 })),
       sessions: [session('s1', 1)],
+      coins: [coin('c1', 10, 100), coin('c2', 50, 300)],
     })
-    const b = backup({ characters: charsOf(char('你', { lastSeen: 1500 })) })
+    const b = backup({ characters: charsOf(char('你', { lastSeen: 1500 })), coins: [coin('c2', 50, 200)] })
 
     const once = mergeLibraries(a, b)
     const twice = mergeLibraries(once, b)
@@ -212,5 +223,105 @@ describe('mergeLibraries — robustness', () => {
 
     expect(twice).toEqual(once)
     expect(thrice).toEqual(once)
+  })
+})
+
+describe('mergeLibraries — coin ledger', () => {
+  it('unions coins by id, deduping shared entries', () => {
+    const a = backup({ coins: [coin('c1', 10, 100), coin('c2', 5, 200)] })
+    const b = backup({ coins: [coin('c2', 5, 200), coin('c3', 50, 300)] })
+
+    const merged = mergeLibraries(a, b)
+
+    expect(merged.coins.map((c) => c.id).sort()).toEqual(['c1', 'c2', 'c3'])
+  })
+
+  it('keeps all 200 coin entries uncapped, unlike the 50-entry cap on sessions', () => {
+    const many = Array.from({ length: 200 }, (_, i) => coin(`c${i}`, 1, i))
+    const merged = mergeLibraries(backup({ coins: many }), backup({}))
+
+    // Contrast with 'caps sessions at the 50 most recent' above: the ledger
+    // IS the balance, so it is never sliced.
+    expect(merged.coins).toHaveLength(200)
+    expect(coinBalance(merged.coins)).toBe(200)
+  })
+
+  it('does not double-count coins across a full sync pipeline (pull -> applyMerged -> push -> applyMerged)', () => {
+    const earned = [coin('r1', 50, 1000), coin('r2', 10, 2000)]
+    const local = backup({ coins: earned })
+    const remote = backup({ coins: [] })
+
+    // pull -> applyMerged: local state becomes the union with the cloud copy.
+    const afterPull = mergeLibraries(remote, local)
+    // push: the remote side merges what we send with its own current copy.
+    const remoteAfterPush = mergeLibraries(remote, afterPull)
+    // applyMerged again locally, against whatever the push round-trip returned.
+    const afterPush = mergeLibraries(afterPull, remoteAfterPush)
+
+    expect(coinBalance(afterPush.coins)).toBe(60)
+
+    // A second sync tick with no new local activity must not add anything.
+    const tick2Pull = mergeLibraries(remoteAfterPush, afterPush)
+    const tick2RemoteAfterPush = mergeLibraries(remoteAfterPush, tick2Pull)
+    const tick2Local = mergeLibraries(tick2Pull, tick2RemoteAfterPush)
+
+    expect(coinBalance(tick2Local.coins)).toBe(60)
+    expect(tick2Local.coins).toHaveLength(2)
+  })
+
+  it('sums coins earned independently offline on two devices', () => {
+    const deviceA = backup({ coins: [coin('a1', 10, 100), coin('a2', 5, 200)] })
+    const deviceB = backup({ coins: [coin('b1', 50, 150)] })
+
+    const merged = mergeLibraries(deviceA, deviceB)
+
+    expect(merged.coins).toHaveLength(3)
+    expect(coinBalance(merged.coins)).toBe(65)
+  })
+
+  it('the same book read on two devices the same day yields one 50-coin reward, not two', () => {
+    const day = '2026-01-05'
+    const id = readingEntryId(day, 'book-1')
+    const deviceA = backup({
+      coins: [{ id, amount: 50, reason: 'reading', date: 1000, day, refId: 'book-1' }],
+    })
+    const deviceB = backup({
+      coins: [{ id, amount: 50, reason: 'reading', date: 2000, day, refId: 'book-1' }],
+    })
+
+    const merged = mergeLibraries(deviceA, deviceB)
+
+    expect(merged.coins).toHaveLength(1)
+    expect(coinBalance(merged.coins)).toBe(50)
+  })
+
+  it('is commutative when the same id carries different dates (earliest wins either way)', () => {
+    const early = coin('x', 50, 1000)
+    const late = coin('x', 50, 5000, { note: 'later mint' })
+
+    const ab = mergeLibraries(backup({ coins: [early] }), backup({ coins: [late] }))
+    const ba = mergeLibraries(backup({ coins: [late] }), backup({ coins: [early] }))
+
+    expect(ab).toEqual(ba)
+    expect(ab.coins[0].date).toBe(1000)
+  })
+
+  it('is commutative even on an exact date tie between differing entries', () => {
+    const left = coin('x', 50, 1000, { note: 'left' })
+    const right = coin('x', 50, 1000, { note: 'right' })
+
+    const ab = mergeLibraries(backup({ coins: [left] }), backup({ coins: [right] }))
+    const ba = mergeLibraries(backup({ coins: [right] }), backup({ coins: [left] }))
+
+    expect(ab).toEqual(ba)
+  })
+
+  it('tolerates a legacy backup missing the coins field, keeping the local ledger', () => {
+    const legacy = { characters: {}, sessions: [], lastModified: 1 } as unknown as LibraryBackup
+    const local = backup({ coins: [coin('a', 10, 100)] })
+
+    const merged = mergeLibraries(legacy, local)
+
+    expect(merged.coins).toEqual([coin('a', 10, 100)])
   })
 })

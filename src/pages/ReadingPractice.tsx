@@ -36,6 +36,7 @@ interface SessionResult {
   wrongChars: string[]
   learnedChars: string[]
   removedChars: string[]
+  coinsEarned: number
 }
 
 type PassageLoadState =
@@ -44,6 +45,7 @@ type PassageLoadState =
 
 export default function ReadingPractice() {
   const recordSession = useLibraryStore((s) => s.recordSession)
+  const awardCoins = useLibraryStore((s) => s.awardCoins)
   const characters = useLibraryStore((s) => s.characters)
   const sessions = useLibraryStore((s) => s.sessions)
   const driveConnected = useDriveStore((s) => s.connected)
@@ -181,6 +183,7 @@ export default function ReadingPractice() {
     if (!book || fullText === null) return
     const results = getCharResults(marks, fullText, isInLibrary)
     recordSession(book.id, book.title, results)
+    const coinsEarned = awardCoins('reading', book.id)
     setResult({
       correct: results.filter((r) => r.outcome === 'correct').length,
       total: results.filter((r) => r.outcome === 'correct' || r.outcome === 'wrong')
@@ -192,6 +195,7 @@ export default function ReadingPractice() {
         .filter((r) => r.outcome === 'learn' || r.outcome === 'learnWrong')
         .map((r) => r.char),
       removedChars: results.filter((r) => r.outcome === 'remove').map((r) => r.char),
+      coinsEarned,
     })
   }
 
@@ -513,6 +517,13 @@ export default function ReadingPractice() {
                           `，移出 ${result.removedChars.length} 个字`}
                       </div>
                     </div>
+                    {result.coinsEarned > 0 ? (
+                      <p className="text-amber-600 font-semibold">
+                        🪙 +{result.coinsEarned} 金币！
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-400">今天这篇课文的金币已经领过啦</p>
+                    )}
                     {result.wrongChars.length > 0 && (
                       <div>
                         <p className="text-sm text-slate-500 mb-2">需要加强的字：</p>

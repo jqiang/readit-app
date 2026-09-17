@@ -40,6 +40,24 @@ export interface ConfusionStat {
 
 export type PinyinMistake = { kind: 'initial' | 'medial' | 'final' | 'tone'; key: string }
 
+export type CoinReason = 'pinyin' | 'review' | 'reading' | 'adjust'
+
+export interface CoinEntry {
+  id: string
+  /** Signed: positive earned, negative redeemed, never 0. */
+  amount: number
+  reason: CoinReason
+  date: number
+  /** Local YYYY-MM-DD, frozen at creation — the daily-bucket identity. Stored
+   * rather than derived so the guard cannot shift if the device timezone
+   * changes, and because the deterministic reading id is built from it. */
+  day: string
+  /** reading: book id · pinyin: mode */
+  refId?: string
+  /** Parent's note on a manual adjustment. */
+  note?: string
+}
+
 export interface ReadingSession {
   id: string
   passageId: string

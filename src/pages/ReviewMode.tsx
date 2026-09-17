@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLibraryStore } from '../store/useLibraryStore'
 import { isActive } from '../lib/mastery'
@@ -11,11 +11,17 @@ export default function ReviewMode() {
   const characters = useLibraryStore((s) => s.characters)
   const recordReview = useLibraryStore((s) => s.recordReview)
   const removeCharacter = useLibraryStore((s) => s.removeCharacter)
+  const awardCoins = useLibraryStore((s) => s.awardCoins)
 
   const [queue, setQueue] = useState<string[] | null>(null)
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [tally, setTally] = useState({ correct: 0, wrong: 0, removed: 0 })
+  const [coinsEarned, setCoinsEarned] = useState(0)
+  // Guards against awarding twice for one round: answer() and
+  // removeAndAdvance() both funnel through advance(), and a round can only
+  // end once. startReview() resets it so 再来一轮 earns again.
+  const awardedRef = useRef(false)
 
   // Characters moved out of the library are kept for safe sync but excluded
   // from review.
@@ -41,6 +47,25 @@ export default function ReviewMode() {
     setIndex(0)
     setRevealed(false)
     setTally({ correct: 0, wrong: 0, removed: 0 })
+    setCoinsEarned(0)
+    awardedRef.current = false
+  }
+
+  // Shared tail for answer()/removeAndAdvance(): advances to the next card,
+  // and — the click handler, not an effect on the render branch, since
+  // effects double-invoke under StrictMode and handlers do not — awards
+  // coins once when this was the round's last card. The next index is
+  // computed here in render scope rather than inside setIndex's updater, so
+  // that updater stays pure.
+  function advance() {
+    if (!queue) return
+    const nextIndex = index + 1
+    setRevealed(false)
+    setIndex(nextIndex)
+    if (nextIndex >= queue.length && !awardedRef.current) {
+      awardedRef.current = true
+      setCoinsEarned(awardCoins('review'))
+    }
   }
 
   function answer(correct: boolean) {
@@ -49,16 +74,14 @@ export default function ReviewMode() {
     setTally((t) =>
       correct ? { ...t, correct: t.correct + 1 } : { ...t, wrong: t.wrong + 1 },
     )
-    setRevealed(false)
-    setIndex((i) => i + 1)
+    advance()
   }
 
   function removeAndAdvance() {
     if (!queue) return
     removeCharacter(queue[index])
     setTally((t) => ({ ...t, removed: t.removed + 1 }))
-    setRevealed(false)
-    setIndex((i) => i + 1)
+    advance()
   }
 
   if (activeChars.length === 0) {
@@ -106,6 +129,9 @@ export default function ReviewMode() {
           认识 {tally.correct} 个 · 不熟悉 {tally.wrong} 个
           {tally.removed > 0 && ` · 移出生字本 ${tally.removed} 个`}
         </p>
+        {coinsEarned > 0 && (
+          <p className="text-amber-600 font-semibold">🪙 +{coinsEarned} 金币</p>
+        )}
         <div className="flex justify-center gap-3">
           <button
             onClick={startReview}

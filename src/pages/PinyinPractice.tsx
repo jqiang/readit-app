@@ -12,6 +12,7 @@ import AnswerSlots from '../components/pinyin/AnswerSlots'
 import PinyinKeyboard from '../components/pinyin/PinyinKeyboard'
 import RoundSummary from '../components/pinyin/RoundSummary'
 import { useAnswerComposer } from '../components/pinyin/useAnswerComposer'
+import { useRoundCoins } from '../components/pinyin/useRoundCoins'
 import { useFreeMode } from '../components/pinyin/useFreeMode'
 import { useSprintMode } from '../components/pinyin/useSprintMode'
 import { useSurvivalMode } from '../components/pinyin/useSurvivalMode'
@@ -74,6 +75,7 @@ export default function PinyinPractice() {
 
 interface ModeRoundProps {
   pool: string[]
+  mode: PinyinMode
   onChangeMode: () => void
 }
 
@@ -83,20 +85,20 @@ interface ModeRoundProps {
 // unmounts the old wrapper (PinyinPractice renders ModeSelect, or a fresh
 // `key={mode}`d PinyinRound, in between), it never keeps ticking in the
 // background the way calling every mode hook unconditionally would.
-function FreeRound({ pool, onChangeMode }: ModeRoundProps) {
-  return <RoundView round={useFreeMode(pool)} onChangeMode={onChangeMode} />
+function FreeRound({ pool, mode, onChangeMode }: ModeRoundProps) {
+  return <RoundView round={useFreeMode(pool)} mode={mode} onChangeMode={onChangeMode} />
 }
 
-function SprintRound({ pool, onChangeMode }: ModeRoundProps) {
-  return <RoundView round={useSprintMode(pool)} onChangeMode={onChangeMode} />
+function SprintRound({ pool, mode, onChangeMode }: ModeRoundProps) {
+  return <RoundView round={useSprintMode(pool)} mode={mode} onChangeMode={onChangeMode} />
 }
 
-function SurvivalRound({ pool, onChangeMode }: ModeRoundProps) {
-  return <RoundView round={useSurvivalMode(pool)} onChangeMode={onChangeMode} />
+function SurvivalRound({ pool, mode, onChangeMode }: ModeRoundProps) {
+  return <RoundView round={useSurvivalMode(pool)} mode={mode} onChangeMode={onChangeMode} />
 }
 
-function SpaceRound({ pool, onChangeMode }: ModeRoundProps) {
-  return <SpaceRoundView round={useSpaceMode(pool)} onChangeMode={onChangeMode} />
+function SpaceRound({ pool, mode, onChangeMode }: ModeRoundProps) {
+  return <SpaceRoundView round={useSpaceMode(pool)} mode={mode} onChangeMode={onChangeMode} />
 }
 
 function PinyinRound({
@@ -110,22 +112,38 @@ function PinyinRound({
 }) {
   switch (mode) {
     case 'sprint':
-      return <SprintRound pool={pool} onChangeMode={onChangeMode} />
+      return <SprintRound pool={pool} mode={mode} onChangeMode={onChangeMode} />
     case 'survival':
-      return <SurvivalRound pool={pool} onChangeMode={onChangeMode} />
+      return <SurvivalRound pool={pool} mode={mode} onChangeMode={onChangeMode} />
     case 'space':
-      return <SpaceRound pool={pool} onChangeMode={onChangeMode} />
+      return <SpaceRound pool={pool} mode={mode} onChangeMode={onChangeMode} />
     case 'free':
     default:
-      return <FreeRound pool={pool} onChangeMode={onChangeMode} />
+      return <FreeRound pool={pool} mode={mode} onChangeMode={onChangeMode} />
   }
 }
 
-function RoundView({ round, onChangeMode }: { round: RoundApi; onChangeMode: () => void }) {
+function RoundView({
+  round,
+  mode,
+  onChangeMode,
+}: {
+  round: RoundApi
+  mode: PinyinMode
+  onChangeMode: () => void
+}) {
   const composer = useAnswerComposer({ char: round.char, onResult: round.onResult })
+  const coinsEarned = useRoundCoins(mode, round.status)
 
   if (round.status === 'over') {
-    return <RoundSummary summary={round.summary} onRestart={round.restart} onChangeMode={onChangeMode} />
+    return (
+      <RoundSummary
+        summary={round.summary}
+        onRestart={round.restart}
+        onChangeMode={onChangeMode}
+        coinsEarned={coinsEarned}
+      />
+    )
   }
 
   if (!round.char) return null
@@ -166,11 +184,27 @@ function RoundView({ round, onChangeMode }: { round: RoundApi; onChangeMode: () 
 // between waves (all invaders resolved, next one not spawned yet) without
 // the round being over, so — unlike RoundView — this never bails out to a
 // blank screen while `status === 'playing'`.
-function SpaceRoundView({ round, onChangeMode }: { round: SpaceRoundApi; onChangeMode: () => void }) {
+function SpaceRoundView({
+  round,
+  mode,
+  onChangeMode,
+}: {
+  round: SpaceRoundApi
+  mode: PinyinMode
+  onChangeMode: () => void
+}) {
   const composer = useAnswerComposer({ char: round.char, onResult: round.onResult })
+  const coinsEarned = useRoundCoins(mode, round.status)
 
   if (round.status === 'over') {
-    return <RoundSummary summary={round.summary} onRestart={round.restart} onChangeMode={onChangeMode} />
+    return (
+      <RoundSummary
+        summary={round.summary}
+        onRestart={round.restart}
+        onChangeMode={onChangeMode}
+        coinsEarned={coinsEarned}
+      />
+    )
   }
 
   return (

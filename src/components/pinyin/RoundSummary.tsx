@@ -4,9 +4,17 @@ interface RoundSummaryProps {
   summary: RoundSummaryData
   onRestart: () => void
   onChangeMode: () => void
+  /** Coins credited for finishing this round, 0 if none (e.g. not yet
+   * awarded). Omit the line entirely when there's nothing to show. */
+  coinsEarned?: number
 }
 
-export default function RoundSummary({ summary, onRestart, onChangeMode }: RoundSummaryProps) {
+export default function RoundSummary({
+  summary,
+  onRestart,
+  onChangeMode,
+  coinsEarned,
+}: RoundSummaryProps) {
   const { correct, wrong, missed, score, isNewBest } = summary
 
   return (
@@ -17,6 +25,7 @@ export default function RoundSummary({ summary, onRestart, onChangeMode }: Round
         答对 {correct} · 答错 {wrong}
       </p>
       {isNewBest && <p className="text-amber-500 font-semibold">🏆 新纪录！</p>}
+      {!!coinsEarned && <p className="text-amber-600 font-semibold">🪙 +{coinsEarned} 金币</p>}
       {missed.length > 0 && (
         <div className="flex flex-wrap justify-center gap-2">
           {missed.map((m) => (

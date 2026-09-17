@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom'
 import { useLibraryStore } from '../store/useLibraryStore'
 import { getMastery, isActive, MASTERY_LABELS } from '../lib/mastery'
+import { COIN_REWARDS, coinBalance, todayEarned } from '../lib/coins'
 import type { Mastery } from '../types'
 
 export default function Dashboard() {
   const characters = useLibraryStore((s) => s.characters)
   const sessions = useLibraryStore((s) => s.sessions)
+  const coins = useLibraryStore((s) => s.coins)
+  const coinTotal = useLibraryStore((s) => coinBalance(s.coins))
   const seedDemoData = useLibraryStore((s) => s.seedDemoData)
   const resetAll = useLibraryStore((s) => s.resetAll)
 
@@ -13,6 +16,7 @@ export default function Dashboard() {
   const total = charList.length
   const now = Date.now()
   const dueCount = charList.filter((c) => c.nextReview <= now).length
+  const earnedToday = todayEarned(coins, now)
 
   const counts: Record<Mastery, number> = {
     new: 0,
@@ -35,6 +39,22 @@ export default function Dashboard() {
         <p className="text-slate-500 mt-1">
           准备好今天的阅读时间了吗？我们一起读故事、认汉字，每天都有新进步～
         </p>
+      </section>
+
+      <section className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-3xl">🪙</span>
+            <span className="text-4xl font-bold text-amber-600">{coinTotal}</span>
+          </div>
+          <div className="text-sm text-amber-700 mt-1">我的金币</div>
+          {earnedToday > 0 && (
+            <div className="text-xs text-amber-600 mt-0.5">今天 +{earnedToday}</div>
+          )}
+        </div>
+        <div className="text-xs text-amber-600/80">
+          朗读 +{COIN_REWARDS.reading} · 拼音 +{COIN_REWARDS.pinyin} · 复习 +{COIN_REWARDS.review}
+        </div>
       </section>
 
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -182,7 +202,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={() => {
-              if (confirm('确定要清空所有学习记录吗？')) resetAll()
+              if (confirm('确定要清空所有学习记录吗？（金币余额会保留）')) resetAll()
             }}
             className="px-3 py-1.5 text-sm rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-rose-300 transition"
           >
