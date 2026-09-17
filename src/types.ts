@@ -21,6 +21,25 @@ export interface CharResult {
   outcome: CharOutcome
 }
 
+export type PinyinMode = 'free' | 'sprint' | 'survival' | 'space'
+
+export interface PinyinCharStat {
+  attempts: number
+  wrong: number
+  /** Decayed running score of how often/recently this character was missed. */
+  wrongScore: number
+  updatedAt: number
+  lastSeen: number
+  lastWrong?: number
+}
+
+export interface ConfusionStat {
+  score: number
+  updatedAt: number
+}
+
+export type PinyinMistake = { kind: 'initial' | 'medial' | 'final' | 'tone'; key: string }
+
 export interface ReadingSession {
   id: string
   passageId: string

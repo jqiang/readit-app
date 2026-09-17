@@ -3,16 +3,9 @@ import { Link } from 'react-router-dom'
 import { useLibraryStore } from '../store/useLibraryStore'
 import { isActive } from '../lib/mastery'
 import { charPinyin } from '../lib/pinyin'
+import { speak } from '../lib/speech'
 
 const QUEUE_SIZE = 10
-
-function speak(text: string) {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.lang = 'zh-CN'
-  window.speechSynthesis.cancel()
-  window.speechSynthesis.speak(utterance)
-}
 
 export default function ReviewMode() {
   const characters = useLibraryStore((s) => s.characters)

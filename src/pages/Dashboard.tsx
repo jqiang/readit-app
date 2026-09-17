@@ -97,7 +97,7 @@ export default function Dashboard() {
         </section>
       )}
 
-      <section className="grid sm:grid-cols-2 gap-3">
+      <section className="grid sm:grid-cols-3 gap-3">
         <Link
           to="/read"
           className="bg-indigo-600 text-white rounded-2xl p-5 hover:bg-indigo-700 transition"
@@ -120,6 +120,14 @@ export default function Dashboard() {
             )}
           </div>
           <div className="text-sm text-slate-400 mt-1">针对薄弱字词强化练习</div>
+        </Link>
+        <Link
+          to="/pinyin"
+          className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-indigo-300 transition"
+        >
+          <div className="text-2xl mb-1">🔤</div>
+          <div className="font-bold text-slate-800">拼音练习</div>
+          <div className="text-sm text-slate-400 mt-1">拼一拼已掌握的字，越玩越熟</div>
         </Link>
       </section>
 
