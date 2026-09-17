@@ -1,9 +1,38 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDriveStore } from '../store/useDriveStore'
+import { useLibraryStore } from '../store/useLibraryStore'
 import { isConfigured } from '../lib/googleDrive'
+import { COIN_REASON_LABELS, coinBalance, recentCoinEntries } from '../lib/coins'
 
 export default function Settings() {
   const drive = useDriveStore()
+  const coins = useLibraryStore((s) => s.coins)
+  const balance = useLibraryStore((s) => coinBalance(s.coins))
+  const adjustCoins = useLibraryStore((s) => s.adjustCoins)
+  const history = recentCoinEntries(coins, 10)
+
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [coinFeedback, setCoinFeedback] = useState<string | null>(null)
+
+  function handleCoinAdjust(sign: 1 | -1) {
+    const n = Number(amount)
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+      setCoinFeedback('请输入一个大于 0 的整数金额')
+      return
+    }
+    const signed = sign * n
+    const noteText = note.trim() || undefined
+    adjustCoins(signed, noteText)
+    if (sign === -1 && balance + signed < 0) {
+      setCoinFeedback(`⚠️ 已兑换 ${n} 个金币，余额变为负数（${balance + signed}）`)
+    } else {
+      setCoinFeedback(sign === 1 ? `已奖励 ${n} 个金币` : `已兑换 ${n} 个金币`)
+    }
+    setAmount('')
+    setNote('')
+  }
 
   return (
     <div className="space-y-5">
@@ -114,6 +143,73 @@ export default function Settings() {
         )}
 
         {drive.error && <p className="text-sm text-rose-600">{drive.error}</p>}
+      </section>
+
+      <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+        <h2 className="font-bold text-slate-800">🪙 金币管理</h2>
+        <p className="text-sm text-slate-600">
+          当前余额：<span className="font-bold text-amber-600">{balance}</span> 个金币
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="数量"
+            className="w-24 px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white"
+          />
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="备注（可选），例如：换玩具"
+            className="flex-1 min-w-[160px] px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white"
+          />
+          <button
+            onClick={() => handleCoinAdjust(-1)}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-rose-600 text-white hover:bg-rose-700 transition"
+          >
+            ➖ 兑换
+          </button>
+          <button
+            onClick={() => handleCoinAdjust(1)}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition"
+          >
+            ➕ 奖励
+          </button>
+        </div>
+        {coinFeedback && <p className="text-xs text-slate-500">{coinFeedback}</p>}
+
+        {history.length > 0 && (
+          <div className="pt-2 border-t border-slate-100">
+            <h3 className="text-xs font-semibold text-slate-400 mb-2">最近记录</h3>
+            <ul className="divide-y divide-slate-100">
+              {history.map((e) => (
+                <li key={e.id} className="py-2 flex items-center justify-between gap-2 text-sm">
+                  <div className="min-w-0">
+                    <div className="text-slate-700">
+                      {COIN_REASON_LABELS[e.reason]}
+                      {e.note && <span className="text-slate-400 ml-1">· {e.note}</span>}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {new Date(e.date).toLocaleDateString('zh-CN')}
+                    </div>
+                  </div>
+                  <span
+                    className={`font-semibold shrink-0 ${
+                      e.amount > 0 ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {e.amount > 0 ? '+' : ''}
+                    {e.amount}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-2">

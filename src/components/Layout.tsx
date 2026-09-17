@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useDriveStore } from '../store/useDriveStore'
+import { useLibraryStore } from '../store/useLibraryStore'
 import { isConfigured } from '../lib/googleDrive'
+import { coinBalance } from '../lib/coins'
 
 const navItems = [
   { to: '/', label: '首页', icon: '🏠' },
@@ -12,6 +15,39 @@ const navItems = [
   { to: '/import', label: '导入课文', icon: '📥' },
   { to: '/settings', label: '设置', icon: '⚙️' },
 ]
+
+/** Compact coin-total pill shown in the header on every page. Reads the
+ * balance through a zustand selector (not `.getState()`), so it re-renders on
+ * every source of change: a local award, a parent adjustment in Settings, and
+ * a cloud sync (`applyMerged` calls `useLibraryStore.setState`, which
+ * notifies subscribers the same as any other mutation). Flashes briefly when
+ * the balance goes *up* — never on a first mount or on a decrease (a
+ * redemption), so a parent deducting coins doesn't get a celebratory pop. */
+function CoinPill() {
+  const balance = useLibraryStore((s) => coinBalance(s.coins))
+  const prevBalance = useRef(balance)
+  const [pulse, setPulse] = useState(false)
+
+  useEffect(() => {
+    if (balance > prevBalance.current) {
+      setPulse(true)
+      const timer = setTimeout(() => setPulse(false), 900)
+      prevBalance.current = balance
+      return () => clearTimeout(timer)
+    }
+    prevBalance.current = balance
+  }, [balance])
+
+  return (
+    <span
+      className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-sm font-semibold ${
+        pulse ? 'animate-coin-pop' : ''
+      }`}
+    >
+      🪙 {balance}
+    </span>
+  )
+}
 
 /** Global banner shown on every page (not just Settings) whenever the app
  * isn't actively backed up to Google Drive — covering all three ways that
@@ -63,11 +99,12 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex flex-col bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">📖</span>
-            <span className="text-lg font-bold text-slate-800">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-2xl shrink-0">📖</span>
+            <span className="text-lg font-bold text-slate-800 truncate">
               LeoReads <span className="text-slate-400 font-normal">识字小助手</span>
             </span>
+            <CoinPill />
           </div>
           <nav className="flex gap-1">
             {navItems.map((item) => (
