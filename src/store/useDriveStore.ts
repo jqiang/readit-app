@@ -6,19 +6,17 @@ import * as drive from '../lib/googleDrive'
 
 /** Snapshot the local library as a backup payload. */
 function localBackup(): LibraryBackup {
-  const { characters, sessions, lastModified } = useLibraryStore.getState()
-  return { characters, sessions, lastModified }
+  const { characters, sessions, coins, lastModified } = useLibraryStore.getState()
+  return { characters, sessions, coins, lastModified }
 }
 
 /** Converge local state onto a merged backup, re-merging with whatever the
- * local store holds now so edits made during the network round-trip survive. */
+ * local store holds now so edits made during the network round-trip survive.
+ * Passes the merge result straight to setState (rather than hand-enumerating
+ * fields) so every `LibraryBackup` key lands in the store structurally — a
+ * future field added to the backup shape can't be silently dropped here. */
 function applyMerged(merged: LibraryBackup): void {
-  const final = mergeLibraries(merged, localBackup())
-  useLibraryStore.setState({
-    characters: final.characters,
-    sessions: final.sessions,
-    lastModified: final.lastModified,
-  })
+  useLibraryStore.setState(mergeLibraries(merged, localBackup()))
 }
 
 type SyncStatus = 'idle' | 'connecting' | 'syncing' | 'error'

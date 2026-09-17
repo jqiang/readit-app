@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { CharacterStats, CharResult, Mastery, ReadingSession } from '../types'
+import type { CharacterStats, CharResult, CoinEntry, Mastery, ReadingSession } from '../types'
 import { applyAttempt, newCharacterStats, setMastery } from '../lib/mastery'
+import { awardEntry, adjustEntry, type EarnReason } from '../lib/coins'
 
 interface LibraryState {
   characters: Record<string, CharacterStats>
   sessions: ReadingSession[]
+  coins: CoinEntry[]
   /** Epoch ms of the last local mutation; 0 if never modified. Used to avoid
    * clobbering newer Drive backups with stale/empty local data. */
   lastModified: number
@@ -25,6 +27,13 @@ interface LibraryState {
   setCharacterMastery: (char: string, mastery: Mastery) => void
   /** Manually register characters the child is already expected to know. Returns how many were newly added. */
   addKnownCharacters: (chars: string[]) => number
+  /** Award coins for finishing a pinyin/review/reading round. Returns the
+   * amount actually credited, 0 when the daily guard blocked it (reading
+   * only), so the caller can show "+50" or "already claimed" without
+   * re-deriving the rule. */
+  awardCoins: (reason: EarnReason, refId?: string) => number
+  /** A parent-entered manual adjustment (redeem/bonus). Ignores 0/non-finite. */
+  adjustCoins: (amount: number, note?: string) => void
   resetAll: () => void
   seedDemoData: () => void
 }
@@ -34,6 +43,7 @@ export const useLibraryStore = create<LibraryState>()(
     (set, get) => ({
       characters: {},
       sessions: [],
+      coins: [],
       lastModified: 0,
 
       recordSession: (passageId, passageTitle, results) => {
@@ -144,6 +154,25 @@ export const useLibraryStore = create<LibraryState>()(
         return added
       },
 
+      awardCoins: (reason, refId) => {
+        const now = Date.now()
+        const entry = awardEntry(get().coins, reason, { refId, now })
+        if (!entry) return 0
+        set({ coins: [entry, ...get().coins], lastModified: now })
+        return entry.amount
+      },
+
+      adjustCoins: (amount, note) => {
+        if (!Number.isFinite(amount) || amount === 0) return
+        const now = Date.now()
+        const entry = adjustEntry(amount, note, now)
+        set({ coins: [entry, ...get().coins], lastModified: now })
+      },
+
+      // Deliberately keeps `coins`: the ledger is money already earned (and
+      // possibly spent) via a real audit trail, not a learning record like
+      // characters/sessions — see the coin-rewards plan, Phase 3. A parent who
+      // truly wants zero uses a manual adjustment, which keeps that trail.
       resetAll: () => set({ characters: {}, sessions: [], lastModified: Date.now() }),
 
       seedDemoData: () => {
@@ -216,6 +245,11 @@ export const useLibraryStore = create<LibraryState>()(
           },
         ]
 
+        // Deliberately leaves `coins` untouched (free, since `set` is
+        // partial): seeding demo coins would inject fake entries into a
+        // ledger that syncs to the real cloud backup and inflate a real
+        // balance. A demo showing 0 coins is fine — demo data is about the
+        // learning data.
         set({ characters, sessions, lastModified: now })
       },
     }),
