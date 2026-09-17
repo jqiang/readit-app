@@ -24,8 +24,9 @@ npx vercel dev    # Vite + api/ Edge Functions together — required for Google 
 
 `npx tsc -b` is the verification bar after each change; also run `npx eslint <changed files>` for
 touched files. Tests so far: `src/lib/librarySync.test.ts` (Vitest), covering the additive
-cloud-merge data-safety invariants, and `src/lib/pinyinPractice.test.ts`, covering `/pinyin`'s
-answer validation, mistake classification, and weighted sampler — run with `npm test`.
+cloud-merge data-safety invariants, `src/lib/pinyinPractice.test.ts`, covering `/pinyin`'s
+answer validation, mistake classification, and weighted sampler, and `src/lib/coins.test.ts`,
+covering the coin ledger/balance/daily-guard logic — run with `npm test`.
 
 ## Stack
 
@@ -49,8 +50,11 @@ HashRouter. `tsconfig` has `noUnusedLocals`/`noUnusedParameters`/`verbatimModule
 
 ### Stores (`src/store/`, all Zustand + `persist` to localStorage)
 - `useLibraryStore` (`readit-library`) — `characters: Record<char, CharacterStats>` (Leitner box,
-  counts, next-review time) and `sessions: ReadingSession[]`. See `lib/mastery.ts` for the box
-  intervals and `getMastery()`.
+  counts, next-review time), `sessions: ReadingSession[]`, and `coins: CoinEntry[]`, an append-only
+  ledger — the coin balance is *derived* (`coinBalance()`, a plain sum) rather than stored, since
+  `mergeLibraries()` can run several times per sync tick and a stored counter would double-count.
+  Unlike `readit-pinyin` below, `coins` **is** part of the Drive backup (`lib/librarySync.ts`).
+  See `lib/mastery.ts` for the box intervals and `getMastery()`.
 - `useBookLibraryStore` (`readit-book-cache`) — book list + lazy-loaded text for `/read`. `books`
   (id/name/title/modifiedTime) comes from `listPassageFiles()`; `refresh()` re-lists the Drive
   folder. `getText(id)` downloads and caches a book's content (only `cache` is persisted,
@@ -75,6 +79,11 @@ HashRouter. `tsconfig` has `noUnusedLocals`/`noUnusedParameters`/`verbatimModule
   tested in `pinyinPractice.test.ts`.
 - `speech.ts` — `speak(text)`, browser speech synthesis (`zh-CN`); shared by `ReviewMode` and
   `/pinyin`.
+- `coins.ts` — pure logic for the coin reward system: `COIN_REWARDS`/`COIN_REASON_LABELS`,
+  `dayKey()` (local date parts, never `toISOString()`), `coinBalance()` (a plain, unclamped sum),
+  and `awardEntry()`/`adjustEntry()`, which mint `CoinEntry` ledger rows — reading rewards use a
+  deterministic `read-<day>-<passageId>` id so the once-per-day cap survives a cross-device merge;
+  pinyin/review use random ids. No React/store imports; tested in `coins.test.ts`.
 - `textExtraction.ts` — `extractTextFromFile()` extracts passage text from a PDF/image via the
   Claude API. Dev path (when `VITE_ANTHROPIC_API_KEY` is set): calls the Anthropic SDK directly
   from the browser (dynamically imported so it's excluded from the prod bundle). Otherwise: calls
