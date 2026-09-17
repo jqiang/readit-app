@@ -23,8 +23,9 @@ npx vercel dev    # Vite + api/ Edge Functions together — required for Google 
 ```
 
 `npx tsc -b` is the verification bar after each change; also run `npx eslint <changed files>` for
-touched files. The only tests so far are `src/lib/librarySync.test.ts` (Vitest), covering the
-additive cloud-merge data-safety invariants — run with `npm test`.
+touched files. Tests so far: `src/lib/librarySync.test.ts` (Vitest), covering the additive
+cloud-merge data-safety invariants, and `src/lib/pinyinPractice.test.ts`, covering `/pinyin`'s
+answer validation, mistake classification, and weighted sampler — run with `npm test`.
 
 ## Stack
 
@@ -40,6 +41,8 @@ HashRouter. `tsconfig` has `noUnusedLocals`/`noUnusedParameters`/`verbatimModule
   folder, plus manual character-marking mode (click-to-cycle)
 - `/library` CharacterLibrary — browse/manage the character library
 - `/review` ReviewMode — Leitner-box flashcard review
+- `/pinyin` PinyinPractice — tap-tile pinyin spelling practice (mastered characters only), four
+  modes (自由练习/两分钟冲刺/生存模式/太空射击)
 - `/import` ImportPassage — extract a passage from a PDF/image (local upload or Google Drive) and
   save it as a `.txt` file to the Drive "ReadIt 课文" folder
 - `/settings` Settings — Google Drive connect/sync
@@ -54,6 +57,11 @@ HashRouter. `tsconfig` has `noUnusedLocals`/`noUnusedParameters`/`verbatimModule
   keyed/invalidated by `modifiedTime`), so opening hundreds of books stays cheap until selected.
 - `useDriveStore` (`readit-drive`) — Google Drive connection state (connected/email/name/
   lastSyncedAt), wraps `lib/googleDrive.ts`.
+- `usePinyinStore` (`readit-pinyin`) — `/pinyin` progress: per-character mistake stats
+  (`charStats`), per-confusion stats (`confusions`, e.g. `final:in→ing`), and per-mode best
+  scores (`bests`). **Local-only**: unlike `readit-library`, it has no Google Drive backup/sync
+  path — `lib/librarySync.ts`'s `mergeLibraries()` only ever carries `readit-library`'s
+  `characters`/`sessions`.
 
 ### Key libs (`src/lib/`)
 - `marking.ts` — character-mark state machine for Reading Practice. In-library chars cycle
@@ -61,6 +69,12 @@ HashRouter. `tsconfig` has `noUnusedLocals`/`noUnusedParameters`/`verbatimModule
   unmarked`. `getCharResults()` turns marks into `CharResult[]` for `recordSession`.
 - `mastery.ts` — Leitner spaced-repetition (boxes 1-6, `applyAttempt`, `getMastery`).
 - `pinyin.ts` — pinyin lookups (`pinyin-pro`, memoized) and `isChineseChar()`.
+- `pinyinPractice.ts` — pure logic for `/pinyin`: tile tables (声母/韵母/声调), reading lookup
+  (own cache, separate from `pinyin.ts`), answer validation, mistake classification, and the
+  decayed-score weighted sampler that favors weak characters/components. No React/store imports;
+  tested in `pinyinPractice.test.ts`.
+- `speech.ts` — `speak(text)`, browser speech synthesis (`zh-CN`); shared by `ReviewMode` and
+  `/pinyin`.
 - `textExtraction.ts` — `extractTextFromFile()` extracts passage text from a PDF/image via the
   Claude API. Dev path (when `VITE_ANTHROPIC_API_KEY` is set): calls the Anthropic SDK directly
   from the browser (dynamically imported so it's excluded from the prod bundle). Otherwise: calls
