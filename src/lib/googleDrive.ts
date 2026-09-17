@@ -7,6 +7,19 @@ const SCOPES =
 const FILE_NAME = 'readit-library.json'
 const PASSAGE_FOLDER_NAME = 'ReadIt 课文'
 
+/**
+ * Thrown by `requestToken(false)` when there is no usable access/refresh
+ * token and interactive re-consent is required. Distinguished from a plain
+ * `Error` so callers (background sync) can tell "the connection is broken,
+ * show a reconnect prompt" apart from a transient network/API failure.
+ */
+export class ReauthRequiredError extends Error {
+  constructor() {
+    super('需要重新连接 Google Drive')
+    this.name = 'ReauthRequiredError'
+  }
+}
+
 export interface PickerDocsView {
   setIncludeFolders(include: boolean): PickerDocsView
   setMimeTypes(mimeTypes: string): PickerDocsView
@@ -237,7 +250,7 @@ async function requestToken(interactive: boolean): Promise<string> {
     connect()
     throw new Error('正在跳转到 Google 登录…')
   }
-  throw new Error('需要重新连接 Google Drive')
+  throw new ReauthRequiredError()
 }
 
 /** Best-effort revoke of whatever token we have, then clear local state. */

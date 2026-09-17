@@ -67,6 +67,11 @@ export default function Settings() {
           </>
         ) : (
           <>
+            {drive.needsReconnect && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                ⚠️ 连接已过期，需要重新登录才能继续同步。
+              </p>
+            )}
             <p className="text-sm text-slate-600">
               已连接：{drive.name || drive.email}
             </p>
