@@ -12,3 +12,57 @@ body {
   background-color: #f8fafc;
   color: #1e293b;
 }
+
+/* Pinyin practice: wrong-answer shake on the answer slots row. */
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+/* Pinyin practice: confetti burst on a correct answer. Each span sets its
+ * own --dx/--dy custom properties for a random flight path. */
+@keyframes confetti-fall {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    transform: translate(-50%, -50%) translate(calc(var(--dx, 0px) * 0.3), calc(var(--dy, -60px) * 0.6)) scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--dx, 0px), calc(var(--dy, -60px) + 90px)) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.animate-confetti-fall {
+  animation: confetti-fall 900ms ease-out forwards;
+}
+
+/* Pinyin practice (太空射击): an invader's burst on a correct answer, timed
+ * to match SPACE_EXPLODE_MS (400ms) in useSpaceMode.ts. */
+@keyframes invader-explode {
+  0% {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1.6);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-invader-explode {
+  animation: invader-explode 400ms ease-out forwards;
+}
