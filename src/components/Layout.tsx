@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useDriveStore } from '../store/useDriveStore'
 
 const navItems = [
   { to: '/', label: '首页', icon: '🏠' },
@@ -10,6 +11,38 @@ const navItems = [
   { to: '/import', label: '导入课文', icon: '📥' },
   { to: '/settings', label: '设置', icon: '⚙️' },
 ]
+
+/** Global banner shown on every page (not just Settings) whenever the Drive
+ * connection is known to be broken — e.g. the refresh token expired after 7
+ * days in OAuth "Testing" mode — so a silently-failing background sync is
+ * never invisible to the user. The one button reconnects directly, which
+ * also immediately re-pulls from the cloud (see useGoogleOAuthRedirect). */
+function DriveReconnectBanner() {
+  const connected = useDriveStore((s) => s.connected)
+  const needsReconnect = useDriveStore((s) => s.needsReconnect)
+  const connecting = useDriveStore((s) => s.status === 'connecting')
+  const label = useDriveStore((s) => s.name || s.email)
+  const connect = useDriveStore((s) => s.connect)
+
+  if (!connected || !needsReconnect) return null
+
+  return (
+    <div className="bg-amber-50 border-b border-amber-200 text-amber-900">
+      <div className="max-w-4xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span>
+          ⚠️ 与 Google Drive{label ? `（${label}）` : ''}的连接已断开，生字本暂时不会自动同步。
+        </span>
+        <button
+          onClick={connect}
+          disabled={connecting}
+          className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition disabled:opacity-50"
+        >
+          {connecting ? '连接中…' : '重新连接'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
@@ -45,6 +78,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             ))}
           </nav>
         </div>
+        <DriveReconnectBanner />
       </header>
       <main
         className={`flex-1 mx-auto px-4 py-6 ${isFullWidth ? 'w-[80%]' : 'w-full max-w-4xl'}`}
