@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useDriveStore } from '../store/useDriveStore'
+import { isConfigured } from '../lib/googleDrive'
 
 const navItems = [
   { to: '/', label: '首页', icon: '🏠' },
@@ -12,11 +13,17 @@ const navItems = [
   { to: '/settings', label: '设置', icon: '⚙️' },
 ]
 
-/** Global banner shown on every page (not just Settings) whenever the Drive
- * connection is known to be broken — e.g. the refresh token expired after 7
- * days in OAuth "Testing" mode — so a silently-failing background sync is
- * never invisible to the user. The one button reconnects directly, which
- * also immediately re-pulls from the cloud (see useGoogleOAuthRedirect). */
+/** Global banner shown on every page (not just Settings) whenever the app
+ * isn't actively backed up to Google Drive — covering all three ways that
+ * can happen: never connected, manually disconnected, or connected-but-
+ * broken (e.g. the refresh token expired after 7 days in OAuth "Testing"
+ * mode). Without this, "not backed up" was only visible on the Settings
+ * page — easy to miss, so the child's progress could go unbacked-up
+ * indefinitely without anyone noticing. The button always goes through
+ * connect(), which also immediately re-pulls from the cloud once it
+ * succeeds (see useGoogleOAuthRedirect). Never shown when Drive isn't
+ * configured at all (no OAuth client id) — there would be nothing to
+ * connect the button to. */
 function DriveReconnectBanner() {
   const connected = useDriveStore((s) => s.connected)
   const needsReconnect = useDriveStore((s) => s.needsReconnect)
@@ -24,20 +31,24 @@ function DriveReconnectBanner() {
   const label = useDriveStore((s) => s.name || s.email)
   const connect = useDriveStore((s) => s.connect)
 
-  if (!connected || !needsReconnect) return null
+  if (!isConfigured()) return null
+  const broken = connected && needsReconnect
+  if (connected && !broken) return null
+
+  const message = broken
+    ? `⚠️ 与 Google Drive${label ? `（${label}）` : ''}的连接已断开，生字本暂时不会自动同步。`
+    : '☁️ 还没有连接 Google Drive，生字本目前只保存在这台设备上，换设备或清除浏览器数据会丢失。'
 
   return (
     <div className="bg-amber-50 border-b border-amber-200 text-amber-900">
       <div className="max-w-4xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-        <span>
-          ⚠️ 与 Google Drive{label ? `（${label}）` : ''}的连接已断开，生字本暂时不会自动同步。
-        </span>
+        <span>{message}</span>
         <button
           onClick={connect}
           disabled={connecting}
           className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition disabled:opacity-50"
         >
-          {connecting ? '连接中…' : '重新连接'}
+          {connecting ? '连接中…' : broken ? '重新连接' : '连接 Google Drive'}
         </button>
       </div>
     </div>
